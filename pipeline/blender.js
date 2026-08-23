@@ -64,11 +64,18 @@ export class BlenderSession {
     return this.client.listTools();
   }
 
-  /** True when the server answers and exposes execute_blender_code. */
+  /**
+   * True when the server answers, exposes execute_blender_code, AND a
+   * trivial execution round-trips into Blender. The MCP server starts
+   * fine even when the Blender side of the bridge is dead, so tool
+   * listing alone lies about health.
+   */
   async isHealthy() {
     try {
       const tools = await this.listTools();
-      return tools.some((t) => t.name === 'execute_blender_code');
+      if (!tools.some((t) => t.name === 'execute_blender_code')) return false;
+      await this.execute('print("health-probe")');
+      return true;
     } catch {
       return false;
     }
