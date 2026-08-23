@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "source": "head:0ae56a63683dc97f334365adf8b39df297c8b2da nothing is published on npm and the remote carries no tag and no release, so the working revision is the only artifact there is",
+  "version": "1.1.0",
+  "source": "head:0044f596c7eff4e17475b8d0bdfb7ff8b7eb03d4 nothing is published on npm and the remote carries no tag and no release, so the working revision is the only artifact there is",
   "surface": [
     "api:addBox",
     "api:buildArmorDetails",
@@ -26,6 +26,7 @@
     "cmd:blender-health",
     "cmd:check-config",
     "cmd:create",
+    "cmd:preview-anim",
     "cmd:sculpt",
     "cmd:setup",
     "cmd:verify",

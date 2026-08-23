@@ -29,6 +29,7 @@ export const DEFAULT_THRESHOLDS = {
   triTolerancePct: 100, // accept up to 2× the target by default
   requireMaterials: true,
   requireAnimations: false,
+  minAnimationClips: 0,
   minBytes: 100,
   maxBytes: 64 * 1024 * 1024,
 };
@@ -90,8 +91,8 @@ export function glbStats(json) {
     primitives,
     triangles,
     materials: (json.materials ?? []).length,
-    skins: (json.skins ?? []).length,
     animations: (json.animations ?? []).length,
+    animationNames: (json.animations ?? []).map((a) => a.name ?? '(unnamed)'),
     textures: (json.textures ?? []).length,
     nodes: (json.nodes ?? []).length,
   };
@@ -120,6 +121,12 @@ export async function verifyGlbStructure(path, thresholds = {}) {
   }
   if (t.requireMaterials && stats.materials === 0) errors.push('no materials');
   if (t.requireAnimations && stats.animations === 0) errors.push('no animation clips');
+  if (stats.animations < (t.minAnimationClips ?? 0)) {
+    errors.push(
+      `too few animation clips: ${stats.animations} < ${t.minAnimationClips}` +
+        (stats.animationNames.length ? ` [${stats.animationNames.join(', ')}]` : ''),
+    );
+  }
 
   return { ok: errors.length === 0, errors, stats, thresholds: t, path };
 }

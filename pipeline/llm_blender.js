@@ -55,6 +55,14 @@ Rules:
     for obj in list(bpy.data.objects): bpy.data.objects.remove(obj, do_unlink=True)
     for mat in list(bpy.data.materials): bpy.data.materials.remove(mat)
 - Iterate in small steps: block out → refine → details → materials/colors.
+- ANIMATION — when the user message says animations are REQUIRED:
+  build ONE Armature (single bone chain or simple skeleton), parent the
+  mesh to it with automatic weights, and create at least TWO named Actions
+  in bpy.data.actions: "idle" plus one characteristic motion ("roar",
+  "flap", "walk", "hover"...). Keyframe bone poses across a short range
+  (24–64 frames). bpy.data.actions persists between blocks, so you can
+  build the rig in one step and keyframe in later steps. The armature does
+  not count toward the triangle budget.
 - When the model is complete, reply with done:true and empty code.
 - Never touch the filesystem except the provided INPUT/OUTPUT paths; never
   import external assets; no network access.`;
@@ -110,7 +118,18 @@ export async function sculptWithLlm(job, config, deps = {}) {
 
   const session = await sessionFactory(config.blender?.mcp ?? {});
   const transcript = [];
-  const messages = [{ role: 'user', content: `Build this asset: ${job.prompt}` }];
+  const requireAnimations =
+    config.verify?.requireAnimations === true || Number(config.verify?.minAnimationClips ?? 0) > 0;
+  const messages = [
+    {
+      role: 'user',
+      content:
+        `Build this asset: ${job.prompt}` +
+        (requireAnimations
+          ? '\n\nHARD REQUIREMENT: the quality gate refuses static meshes. The final GLB must contain a rigged mesh (skin) and at least two named animation clips (bpy Actions), e.g. "idle" plus one characteristic motion.'
+          : ''),
+    },
+  ];
 
   try {
     const tools = await session.listTools().catch(() => []);

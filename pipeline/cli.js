@@ -15,7 +15,7 @@ import { McpStdioClient } from './weles.js';
 import { BlenderSession } from './blender.js';
 import { provisionBlender } from './setup.js';
 import { verifyAsset } from './verify.js';
-import { sculptWithLlm } from './llm_blender.js';
+import { renderAnimationPreview } from './preview.js';
 
 
 function redactSecrets(node, path = []) {
@@ -65,6 +65,8 @@ commands:
   create <prompt> [--race r] [--out dir] [--config path]
   sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]
                                   LLM (Opus) iteratively builds the model in Blender
+  preview-anim <file.glb> [--clip name] [--frames n] [--fps n] [--out f.gif]
+                                  render an animated GIF of one clip through Blender
   verify <file.glb> [--config path]   structural + optional render gate
   check-config [--config path]
   weles-tools
@@ -186,6 +188,30 @@ async function main() {
         { onRound: (r) => console.error(`[round ${r.round}] ${r.step.thought ?? ''}`) },
       );
       console.log(JSON.stringify({ ...result, transcript: undefined, rounds: result.rounds }, null, 2));
+      return;
+    }
+    case 'preview-anim': {
+      const file = positional[0];
+      if (!file) {
+        console.error('error: preview-anim requires a .glb path');
+        process.exitCode = 2;
+        return;
+      }
+      let config = {};
+      try {
+        config = await loadPipelineConfig(configPath);
+      } catch {
+        // config optional — blender.mcp defaults apply without it
+      }
+      const result = await renderAnimationPreview({
+        glbPath: file,
+        outPath: options.out,
+        clip: options.clip,
+        frames: options.frames ? Number(options.frames) : undefined,
+        fps: options.fps ? Number(options.fps) : undefined,
+        sessionOptions: config.blender?.mcp,
+      });
+      console.log(JSON.stringify(result, null, 2));
       return;
     }
     case 'help':

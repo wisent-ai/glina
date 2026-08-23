@@ -28,12 +28,13 @@ export function buildCompleter(models = {}, { fetchImpl } = {}) {
         'only through Brama (models.brama.url + models.brama.key)',
     );
   }
-  if (models.brama?.url && models.brama?.key) {
+  if (models.brama?.url && models.brama?.key && models.brama?.bearer) {
     return bramaCompleter(models.brama, fetch_);
   }
   throw new LlmError(
-    'no model backend configured — set models.brama.url+key ' +
-      '(skarbiec:// references in pipeline.config.json)',
+    'no model backend configured — set models.brama.url + key + bearer ' +
+      '(skarbiec:// references in pipeline.config.json). Brama requires the ' +
+      'client bearer AND the agent HMAC signature on every call.',
   );
 }
 
@@ -49,29 +50,52 @@ function bramaCompleter(cfg, fetch_) {
     // x-agent-id + x-agent-timestamp + x-agent-signature =
     // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>").
     const { createHash, createHmac } = await import('node:crypto');
-    const ts = String(Math.floor(Date.now() / 1000));
-    const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
-    const signature = createHmac('sha256', cfg.key)
-      .update(`${cfg.agent_id}:${ts}:${bodyHash}`)
-      .digest('hex');
-    const response = await fetch_(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-agent-id': cfg.agent_id,
-        'x-agent-timestamp': ts,
-        'x-agent-signature': signature,
-      },
-      body: bodyStr,
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new LlmError(`brama HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`, {
-        status: response.status,
-      });
+    // The fleet path to Brama can flap (a resolver adapter re-dials its
+    // upstream per connection), so transport-level failures retry; a signed
+    // refusal (401/403) or a routing error never does.
+    const attempts = cfg.attempts ?? 4;
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const ts = String(Math.floor(Date.now() / 1000));
+      const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
+      const signature = createHmac('sha256', cfg.key)
+        .update(`${cfg.agent_id}:${ts}:${bodyHash}`)
+        .digest('hex');
+      try {
+        const response = await fetch_(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${cfg.bearer}`,
+            'x-agent-id': cfg.agent_id,
+            'x-agent-timestamp': ts,
+            'x-agent-signature': signature,
+          },
+          body: bodyStr,
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new LlmError(
+            `brama HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`,
+            { status: response.status },
+          );
+          if ((response.status === 502 || response.status === 503) && attempt < attempts) {
+            lastError = error;
+            await new Promise((r) => setTimeout(r, attempt * 1500));
+            continue;
+          }
+          throw error;
+        }
+        const text = body.choices?.[0]?.message?.content ?? '';
+        return { text, stopReason: body.choices?.[0]?.finish_reason };
+      } catch (error) {
+        if (error instanceof LlmError) throw error;
+        lastError = error;
+        if (attempt >= attempts) break;
+        await new Promise((r) => setTimeout(r, attempt * 1500));
+      }
     }
-    const text = body.choices?.[0]?.message?.content ?? '';
-    return { text, stopReason: body.choices?.[0]?.finish_reason };
+    throw new LlmError(`brama unreachable after ${attempts} attempts: ${lastError?.message ?? 'unknown'}`);
   };
 }
 
