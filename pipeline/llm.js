@@ -72,6 +72,9 @@ function bramaCompleter(cfg, fetch_) {
             'x-agent-signature': signature,
           },
           body: bodyStr,
+          // A black-holed connection must never hang the sculpt loop: every
+          // attempt gets one hard deadline.
+          signal: AbortSignal.timeout(Number(cfg.timeoutMs ?? 120_000)),
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) {
@@ -80,6 +83,7 @@ function bramaCompleter(cfg, fetch_) {
             { status: response.status },
           );
           if ((response.status === 502 || response.status === 503) && attempt < attempts) {
+            console.error(`[brama] attempt ${attempt}/${attempts} failed: HTTP ${response.status}, retrying`);
             lastError = error;
             await new Promise((r) => setTimeout(r, attempt * 3000));
             continue;
