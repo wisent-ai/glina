@@ -1,12 +1,12 @@
 ---
-name: game_asset_creator
-description: Generate, post-process, and verify game assets for simple-rts-unity — procedural runtime art (anatomy/sculpt/card art), AI text-to-3D pipeline, Blender MCP post-processing, and a GLB quality gate. Credentials come only from Skarbiec (skarbiec:// refs); browser work only via the Weles MCP server; Blender work only via the Blender MCP server. Use when creating, processing, or verifying models/card art for the game.
+name: glina
+description: Glina — generate, post-process, and verify game assets. Procedural runtime art (anatomy/sculpt/card art), AI text-to-3D pipeline, Blender MCP post-processing, and a GLB quality gate. Credentials come only from Skarbiec (skarbiec:// refs); browser work only via the Weles MCP server; Blender work only via the Blender MCP server; model access ONLY via Brama. Use when creating, processing, or verifying 3D models or card art.
 ---
 
-# game_asset_creator
+# Glina
 
-Asset pipeline for the RTS game (races: humans / dwarves / elves / skeletons).
-Two halves:
+Asset pipeline born inside the RTS game simple-rts-unity (races: humans /
+dwarves / elves / skeletons); two halves:
 
 - **Runtime art** (`src/`) — procedural THREE.js generation imported by the
   game: `makeBody` / `sculptHumanoid` / `cardArtSvg`. No credentials, no
@@ -49,11 +49,11 @@ node pipeline/cli.js setup [--check|--dry-run]
 
 ## LLM sculpt mode
 
-`sculpt` lets a model (Claude Opus via `models.anthropic.api_key =
-skarbiec://ANTHROPIC/api_key`, or Brama via `models.brama.{url,key,model}`)
-iteratively write bpy code into the Blender MCP session — block out,
-refine, colors — then exports GLB and runs the verification gate. Cap:
-`llm.maxRounds` (default 12). MCP tool: `gac_sculpt`.
+`sculpt` lets a model iteratively write bpy code into the Blender MCP session
+— block out, refine, colors — then exports GLB and runs the verification
+gate. Model access goes ONLY through Brama (`models.brama.{url,key,model}`);
+direct provider APIs do not exist in this package. Cap: `llm.maxRounds`
+(default 12). MCP tool: `glina_sculpt`.
 
 `create` flow: login → prompt → poll → download `.glb` → optional Blender
 postprocess (`blender.enabled`, `blender.processCode` sees
@@ -63,12 +63,12 @@ broken/off-budget assets). Outputs `<name>.glb` (+ `<name>.processed.glb`).
 ## MCP server (for agents)
 
 ```bash
-node pipeline/mcp.js        # stdio JSON-RPC MCP, package bin: game-asset-mcp
+node pipeline/mcp.js        # stdio JSON-RPC MCP, package bin: glina-mcp
 ```
 
-Tools: `gac_create_asset` (prompt/race/out_dir/filename/config),
-`gac_sculpt` (prompt/out_dir/filename/max_rounds/config), `gac_verify_asset`
-(path/config), `gac_check_config`, `gac_blender_health`, `gac_weles_tools`.
+Tools: `glina_create_asset` (prompt/race/out_dir/filename/config),
+`glina_sculpt` (prompt/out_dir/filename/max_rounds/config), `glina_verify_asset`
+(path/config), `glina_check_config`, `glina_blender_health`, `glina_weles_tools`.
 
 ## Verification gate (`verify` in config)
 

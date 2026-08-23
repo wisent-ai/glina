@@ -1,14 +1,14 @@
 {
-  "name": "game_asset_creator",
-  "version": "0.1.0",
-  "description": "Runtime asset-creation pipeline for simple-rts-unity: procedural character bodies, sculpted humanoids, gear, and card art. No downloaded models \u2014 everything is built from THREE.js primitives.",
+  "name": "@wisent-ai/glina",
+  "version": "1.0.0",
+  "description": "Glina — your AI sculpts your game assets. Procedural THREE.js runtime art plus an AI text-to-3D pipeline (Brama-modeled Blender sculpting, Weles browser layer, Skarbiec-only credentials) with a GLB quality gate.",
   "type": "module",
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
     "./anatomy": "./src/anatomy.js",
     "./sculpt": "./src/sculpt.js",
-    "./sculpt-gear": "./sculpt-gear.js",
+    "./sculpt-gear": "./src/sculpt-gear.js",
     "./card-art": "./src/card-art.js",
     "./loader": "./src/loader.js"
   },
@@ -23,7 +23,9 @@
     "threejs",
     "procedural-generation",
     "game-assets",
-    "rts"
+    "ai",
+    "blender",
+    "glb"
   ],
   "license": "MIT",
   "peerDependencies": {
@@ -34,7 +36,7 @@
     "setup": "node pipeline/setup.js"
   },
   "bin": {
-    "game-asset-create": "pipeline/cli.js",
-    "game-asset-mcp": "pipeline/mcp.js"
+    "glina": "pipeline/cli.js",
+    "glina-mcp": "pipeline/mcp.js"
   }
 }

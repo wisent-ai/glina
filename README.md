@@ -1,177 +1,83 @@
-# game_asset_creator
+# Glina
 
-The asset-creation pipeline of **simple-rts-unity**, extracted from
-`web/art/` into a standalone ES-module package. Every visual the game
-shows is generated at runtime — no downloaded models, no build step.
+**Your AI sculpts your game assets.** Glina turns a text prompt into a verified,
+game-ready GLB: a Brama-routed model writes Blender Python, executes it through
+a live Blender MCP session, round by round, and every result passes a structural
+quality gate before it counts as done.
 
-## Pipeline overview
+Born as the asset pipeline of the browser RTS [simple-rts-unity](https://github.com/lbartoszcze/simple-rts-unity)
+(`web/art/`, extracted with full history), now a standalone Wisent product.
 
-```
-race + tier + class + weapon
-        │
-        ▼
-  anatomy.js ── makeBody()          base body: primitives + marching-cubes
-        │                            blob skin, per-race proportions/palette
-        ▼
-  sculpt.js ── sculptHumanoid()     high-detail character (~6k tris target):
-        │                            torso rings, limbs, head, face
-        ▼
-  sculpt-gear.js                    gear pass: axes, armor plates, capes,
-        │                            body details (per tier)
-        ▼
-  THREE.Mesh  ◄── game (units.js)
-```
+## Two halves
 
-Cards go through a parallel path:
+- **Runtime art** (`src/`) — procedural THREE.js generation imported by a game:
+  `makeBody` / `sculptHumanoid` / `cardArtSvg`. No credentials, no network.
+- **Authoring pipeline** (`pipeline/`) — AI text→3D generation with strict
+  integration rules (below).
 
-```
-card definition (lib/cards.js)
-        │
-        ▼
-  card-art.js ── cardArtSvg()       full-card SVG: race palette, scene
-        │                            backdrop, glyph from assets/cards/
-        ▼
-  inline <svg> in the UI
-```
+## Hard rules (never bypass)
 
-## Layout
+1. **Secrets**: only via [Skarbiec](https://github.com/wisent-ai/skarbiec).
+   Config holds `skarbiec://<item>/<field>` refs; the loader rejects inline
+   secrets and credential-shaped env vars.
+2. **Browser**: only via the Weles MCP stdio server (`weles-mcp`), never a
+   local Chromium/profile.
+3. **Blender**: only via a Blender MCP server (`uvx blender-mcp` default),
+   never hand-rolled sockets.
+4. **Model access**: ONLY via [Brama](https://github.com/wisent-ai/brama), the
+   org model router. There is NO direct provider API code in this package —
+   direct paths were deleted at the owner's demand, not gated.
 
-- `src/anatomy.js` — `makeBody(team, race, armorTier, weaponTier, klass,
-  magicType, weaponStyle)` + `buildBlobBody()` (marching-cubes skin)
-- `src/sculpt.js` — `sculptHumanoid(opts)` high-fidelity sculpt used by
-  the tier demos
-- `src/sculpt-gear.js` — vertex-level gear builders (`buildAxe`,
-  `buildArmorDetails`, `buildBodyDetails`, `buildExtraDetails`,
-  `buildCape`, `addBox`)
-- `src/card-art.js` — `cardArtSvg(card, race)`; reads glyph SVGs from
-  `assets/cards/` (override the base with `window.CARD_ART_BASE`)
-- `src/loader.js` — GLB loader API kept as a procedural-only stub
-  (the runtime is 100% generated; the stub preserves the import
-  surface for callers)
-- `assets/cards/` — 25 glyph SVGs used by card art
-- `assets/models/` — reference GLBs (AI-pipeline outputs kept for the
-  demo viewers, not used by the game at runtime)
-
-## Usage
-
-```js
-import { makeBody, sculptHumanoid, cardArtSvg } from './game_asset_creator/src/index.js';
-```
-
-The package is browser-native ESM; `three` resolves through the import
-map in `web/index.html` (unpkg CDN). No bundler required — GitHub Pages
-serves `web/` as-is.
-
-Consumers inside the repo: `web/units.js` (game units),
-`web/lib/cards.js` (card UI), `web/demos/tiers.html` (sculpt showcase),
-`web/demos/text2game-real-viewer.html` (reference GLB viewer).
-
----
-
-# Authoring pipeline (`pipeline/`)
-
-Offline asset *generation* (text→3D) with two hard rules:
-
-1. **Credentials come ONLY from Skarbiec.** Config files carry
-   `skarbiec://<item>/<field>` references; `pipeline/config.js` rejects
-   inline secrets and credential-shaped env vars. Nothing is read from
-   browser profiles, cookie DBs, or key files.
-2. **The browser is driven ONLY through the Weles MCP API** (`weles-mcp`
-   stdio server). The pipeline never launches its own Chromium and never
-   touches a local profile.
-
-## Setup
+## Install
 
 ```sh
-# one-time: put the studio account into the vault
-skarbiec set TEXT2GAME_ACCOUNT --type login \
-  --field login_email=you@example.com --field login_password=...
-
-# configure (all secrets stay as skarbiec:// references)
-cp pipeline.config.example.json pipeline.config.json  # edit URLs/selectors
+npm install -g @wisent-ai/glina     # or: npm install @wisent-ai/glina
 ```
 
-## Run
+Bins: `glina` (CLI) and `glina-mcp` (MCP stdio server for agents).
 
-```bash
-# validate config + resolve vault refs (no browser)
-node pipeline/cli.js check-config
+## Use
 
-# generate one asset end-to-end
-node pipeline/cli.js create "dwarven axe warrior, low-poly" --race dwarves
-
-# inspect what the Weles MCP server exposes
-node pipeline/cli.js weles-tools
-
-# tests (fake skarbiec + fake MCP server, no real vault/browser)
-npm test
+```sh
+glina check-config                                   # validate config + vault refs
+glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
+glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
+glina verify assets/models/tower.glb                 # GLB quality gate
+glina blender-health                                 # probe the Blender session
+glina weles-tools                                    # list browser-layer tools
 ```
 
-## Layout
+MCP tools for agent hosts (`glina-mcp`): `glina_create_asset`,
+`glina_sculpt`, `glina_verify_asset`, `glina_check_config`,
+`glina_blender_health`, `glina_weles_tools`.
 
-- `pipeline/skarbiec.js` — `skarbiec://` resolver over the vault CLI
-- `pipeline/config.js` — config loader + inline-secret/env guards
-- `pipeline/weles.js` — JSON-RPC stdio client + browser session over
-  the Weles MCP tools (`weles_browser_start`, `weles_page_*`)
-- `pipeline/text2game.js` — login → prompt → poll → download flow
-  (selectors/URLs are config-driven)
-- `pipeline/cli.js` — `create` / `check-config` / `weles-tools`
-- `tests/` — node:test suite with fake vault + fake MCP server
+## Verification gate
 
-### Blender MCP mode (post-processing)
+Every produced `.glb` passes `pipeline/verify.js`: valid glTF container,
+mesh/primitive sanity, triangle budget (default 6000 ±100%), materials/skins/
+animation presence, file-size bounds, optional Blender render smoke. The gate
+fails the job; it never warns.
 
-After a GLB lands on disk, an optional Blender step remeshes / decimates /
-rigs / re-exports it. Blender work goes through a **Blender MCP server**
-too — the pipeline never drives Blender over hand-rolled sockets.
+## Proven results
 
-```bash
-# automatic provisioning: Blender + uv + blender-mcp (idempotent)
-node pipeline/cli.js setup            # or: npm run setup
-node pipeline/cli.js setup --check    # verify only
-node pipeline/cli.js setup --dry-run  # print the plan
+Generated end-to-end and gate-verified on live runs:
 
-# health probe against the MCP server
-node pipeline/cli.js blender-health
+- `kamien.glb` — granite boulder with moss patches (12 bpy rounds, Brama →
+  Blender MCP, 2026-07-27)
+- `krasnolud-wojownik.glb` — dwarven warrior (local Brama, 2026-07-28)
 
-# enable in pipeline.config.json:
-#   "blender": { "enabled": true, "processCode": "<bpy python>" }
-# processCode sees INPUT_PATH / OUTPUT_PATH globals; default spawn is
-# `uvx blender-mcp` (override with blender.mcp.command/args).
-```
+## Surfaces
 
-With `blender.enabled` the `create` flow writes
-`<name>.processed.glb` next to the downloaded artifact and reports it as
-`processedPath` in the CLI output.
+| Surface | Repository |
+|---|---|
+| CLI + pipeline | `wisent-ai/glina` (this repo) |
+| macOS app | `wisent-ai/glina-desktop` |
+| Website | `wisent-ai/glina-landing` |
 
-### LLM sculpt mode ("Opus wyklepuje w Blenderze")
+Quality journeys and visual evaluation are registered in **Probierz**
+(`apps/game-asset-creator`); package-local unit tests (`npm test`) stay for
+fast iteration only.
 
-An LLM (Claude Opus via the Anthropic API, or any model through Brama's
-OpenAI-compatible router) iteratively *writes bpy code* to build a model,
-executing each step through the Blender MCP session:
+## License
 
-```
-prompt → model writes bpy → execute (Blender MCP) → viewport screenshot
-       → next round … → done → export GLB → verification gate
-```
-
-```bash
-# config: models.anthropic.api_key = "skarbiec://ANTHROPIC/api_key"
-# (or models.brama.{url,key,model} for the router)
-node pipeline/cli.js sculpt "gothic dwarven tower, low-poly" --rounds 12
-```
-
-The loop caps at `llm.maxRounds` (default 12), feeds execution errors back
-to the model, and fails the job if the model doesn't finish or the final
-GLB fails verification. Also exposed as the `gac_sculpt` MCP tool.
-
-> **Model access note:** Brama (the org model router) is the ONLY model
-> backend. Direct provider API code (Anthropic etc.) was deleted from
-> this package at the user's explicit decision — not gated, gone.
-
-### Tests & evals
-
-Unit tests: `npm test` (package-local, fake vault/MCP/LLM).
-E2E journeys + visual evaluation live in **Probierz** (app
-`game-asset-creator`): CLI/verify journeys in
-`packages/tui/specs/`, Brama-vision asset eval in
-`apps/game-asset-creator/evals/visual-eval.mjs`.
+MIT

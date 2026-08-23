@@ -178,22 +178,22 @@ function mcpRequest(proc, message) {
   });
 }
 
-test('pipeline/mcp.js serves initialize, tools/list and gac_verify_asset', async () => {
+test('pipeline/mcp.js serves initialize, tools/list and glina_verify_asset', async () => {
   const serverPath = new URL('../pipeline/mcp.js', import.meta.url).pathname;
   const proc = spawn('node', [serverPath], { stdio: ['pipe', 'pipe', 'inherit'] });
   try {
     const init = await mcpRequest(proc, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
-    assert.equal(init.result.serverInfo.name, 'game_asset_creator');
+    assert.equal(init.result.serverInfo.name, 'glina');
 
     const list = await mcpRequest(proc, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
     const names = list.result.tools.map((t) => t.name);
     assert.deepEqual(names.sort(), [
-      'gac_blender_health',
-      'gac_check_config',
-      'gac_create_asset',
-      'gac_sculpt',
-      'gac_verify_asset',
-      'gac_weles_tools',
+      'glina_blender_health',
+      'glina_check_config',
+      'glina_create_asset',
+      'glina_sculpt',
+      'glina_verify_asset',
+      'glina_weles_tools',
     ]);
 
     const glbPath = await tempGlb(modelJson({ triangles: 6000 }));
@@ -201,7 +201,7 @@ test('pipeline/mcp.js serves initialize, tools/list and gac_verify_asset', async
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
-      params: { name: 'gac_verify_asset', arguments: { path: glbPath } },
+      params: { name: 'glina_verify_asset', arguments: { path: glbPath } },
     });
     const report = JSON.parse(call.result.content[0].text);
     assert.equal(report.ok, true);

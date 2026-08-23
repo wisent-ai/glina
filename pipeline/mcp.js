@@ -19,7 +19,7 @@ const DEFAULT_CONFIG = new URL('../pipeline.config.json', import.meta.url).pathn
 
 const TOOLS = [
   {
-    name: 'gac_create_asset',
+    name: 'glina_create_asset',
     description:
       'Generate one 3D asset end-to-end: login (Skarbiec creds) → text prompt → poll artifact → download GLB → optional Blender postprocess → verification gate. Returns paths + verification report.',
     inputSchema: {
@@ -35,7 +35,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'gac_verify_asset',
+    name: 'glina_verify_asset',
     description:
       'Run the asset quality gate on a .glb: GLB structure, triangle budget (default ~6k), materials/skins/animations presence, optional Blender render smoke. Returns { ok, errors, stats }.',
     inputSchema: {
@@ -48,7 +48,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'gac_check_config',
+    name: 'glina_check_config',
     description:
       'Validate pipeline.config.json and resolve all skarbiec:// references against the vault (no browser, no Blender). Returns the config with credentials redacted.',
     inputSchema: {
@@ -57,7 +57,7 @@ const TOOLS = [
     },
   },
   {
-    name: 'gac_sculpt',
+    name: 'glina_sculpt',
     description:
       'LLM-driven Blender sculpting: the model (Opus via Skarbiec-held key or Brama) iteratively writes bpy code, executes it through the Blender MCP session, then exports GLB and runs the verification gate. "Opus wyklepuje" the asset for you.',
     inputSchema: {
@@ -73,12 +73,12 @@ const TOOLS = [
     },
   },
   {
-    name: 'gac_blender_health',
+    name: 'glina_blender_health',
     description: 'Probe the Blender MCP server (handshake + execute_blender_code availability).',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'gac_weles_tools',
+    name: 'glina_weles_tools',
     description: 'List the tools exposed by the Weles MCP server (browser layer).',
     inputSchema: { type: 'object', properties: {} },
   },
@@ -114,7 +114,7 @@ function errorResult(message) {
 async function callTool(name, args = {}) {
   const configPath = typeof args.config === 'string' ? args.config : DEFAULT_CONFIG;
   switch (name) {
-    case 'gac_create_asset': {
+    case 'glina_create_asset': {
       if (typeof args.prompt !== 'string' || !args.prompt.trim()) {
         return errorResult('prompt is required');
       }
@@ -130,7 +130,7 @@ async function callTool(name, args = {}) {
       );
       return textResult(result);
     }
-    case 'gac_verify_asset': {
+    case 'glina_verify_asset': {
       if (typeof args.path !== 'string' || !args.path) {
         return errorResult('path is required');
       }
@@ -142,7 +142,7 @@ async function callTool(name, args = {}) {
       }
       return textResult(await verifyAsset(args.path, config));
     }
-    case 'gac_sculpt': {
+    case 'glina_sculpt': {
       if (typeof args.prompt !== 'string' || !args.prompt.trim()) {
         return errorResult('prompt is required');
       }
@@ -158,18 +158,18 @@ async function callTool(name, args = {}) {
       );
       return textResult({ ...result, transcript: undefined });
     }
-    case 'gac_check_config': {
+    case 'glina_check_config': {
       const config = await loadPipelineConfig(configPath);
       return textResult(redactSecrets(config));
     }
-    case 'gac_blender_health': {
+    case 'glina_blender_health': {
       const session = await BlenderSession.start({});
       const healthy = await session.isHealthy();
       const tools = await session.listTools().catch(() => []);
       await session.close();
       return textResult({ healthy, tools: tools.map((t) => t.name) });
     }
-    case 'gac_weles_tools': {
+    case 'glina_weles_tools': {
       const client = new McpStdioClient({});
       await client.start();
       const tools = await client.listTools();
@@ -195,7 +195,7 @@ async function handle(request) {
     return respond(id, {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: {} },
-      serverInfo: { name: 'game_asset_creator', version: '0.1.0' },
+      serverInfo: { name: 'glina', version: '1.0.0' },
     });
   }
   if (method === 'ping') return respond(id, {});

@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
-  "source": "head:78ed8d2a3555371e222950ca25b6818b33738a47 nothing is published on npm and the remote carries no tag and no release, so the working revision is the only artifact there is",
+  "version": "1.0.0",
+  "source": "head:0ae56a63683dc97f334365adf8b39df297c8b2da nothing is published on npm and the remote carries no tag and no release, so the working revision is the only artifact there is",
   "surface": [
     "api:addBox",
     "api:buildArmorDetails",
@@ -21,8 +21,8 @@
     "api:makeBody",
     "api:playClip",
     "api:sculptHumanoid",
-    "bin:game-asset-create",
-    "bin:game-asset-mcp",
+    "bin:glina",
+    "bin:glina-mcp",
     "cmd:blender-health",
     "cmd:check-config",
     "cmd:create",
@@ -30,16 +30,17 @@
     "cmd:setup",
     "cmd:verify",
     "cmd:weles-tools",
-    "mcp:gac_blender_health",
-    "mcp:gac_check_config",
-    "mcp:gac_create_asset",
-    "mcp:gac_sculpt",
-    "mcp:gac_verify_asset",
-    "mcp:gac_weles_tools",
+    "mcp:glina_blender_health",
+    "mcp:glina_check_config",
+    "mcp:glina_create_asset",
+    "mcp:glina_sculpt",
+    "mcp:glina_verify_asset",
+    "mcp:glina_weles_tools",
     "subpath:.",
     "subpath:./anatomy",
     "subpath:./card-art",
     "subpath:./loader",
-    "subpath:./sculpt"
+    "subpath:./sculpt",
+    "subpath:./sculpt-gear"
   ]
 }

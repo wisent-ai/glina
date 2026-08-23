@@ -13,7 +13,7 @@ const SCENES = {
 };
 const TIER_GLOW = { common: '#bdbdbd', combo: '#6cd6ff', rare: '#b88dff' };
 
-const ART_BASE = (typeof window !== 'undefined' && window.CARD_ART_BASE) ? window.CARD_ART_BASE : 'game_asset_creator/assets/cards';
+const ART_BASE = (typeof window !== 'undefined' && window.CARD_ART_BASE) ? window.CARD_ART_BASE : 'glina/assets/cards';
 
 let cnt = 0;
 

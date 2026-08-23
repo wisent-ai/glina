@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract the public surface of game_asset_creator.
+"""Extract the public surface of Glina (@wisent-ai/glina).
 
 WHY THIS SET IS THE CONTRACT
 ----------------------------

@@ -1,4 +1,4 @@
-// game_asset_creator — public entry point.
+// glina — public entry point.
 //
 // The asset-creation pipeline of simple-rts-unity, extracted from
 // web/art/ into a standalone module. Everything the game renders is

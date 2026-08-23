@@ -57,7 +57,7 @@ export class McpStdioClient {
     await this._request('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'game_asset_creator', version: '0.1.0' },
+      clientInfo: { name: 'glina', version: '1.0.0' },
     });
     this._notify('notifications/initialized');
   }

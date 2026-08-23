@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate released-surface.json for game_asset_creator from the best tier.
+"""Generate released-surface.json for Glina (@wisent-ai/glina) from the best tier.
 
 The baseline describes the version *actually published*, never the version the
 manifest happens to declare. Preference runs down the adoption guide's table:
@@ -94,7 +94,7 @@ GITHUB_API = "https://api.github.com"
 # published package at all.
 CONTROL_PACKAGE = "three"
 
-USER_AGENT = "game_asset_creator-baseline (autoversion adoption)"
+USER_AGENT = "glina-baseline (autoversion adoption)"
 TIMEOUT = len("xxxxxxxxxxxxxxxxxxxx")  # seconds
 
 BASELINE_NAME = "released-surface.json"
