@@ -5,7 +5,7 @@ game-ready GLB: a Brama-routed model writes Blender Python, executes it through
 a live Blender MCP session, round by round, and every result passes a structural
 quality gate before it counts as done.
 
-Born as the asset pipeline of the browser RTS [simple-rts-unity](https://github.com/lbartoszcze/simple-rts-unity)
+Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbartoszcze/potyczka)
 (`web/art/`, extracted with full history), now a standalone Wisent product.
 
 ## Two halves
