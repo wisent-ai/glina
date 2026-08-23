@@ -15,6 +15,7 @@ import { McpStdioClient } from './weles.js';
 import { BlenderSession } from './blender.js';
 import { provisionBlender } from './setup.js';
 import { verifyAsset } from './verify.js';
+import { sculptWithLlm } from './llm_blender.js';
 import { renderAnimationPreview } from './preview.js';
 
 
