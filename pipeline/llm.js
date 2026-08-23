@@ -81,7 +81,7 @@ function bramaCompleter(cfg, fetch_) {
           );
           if ((response.status === 502 || response.status === 503) && attempt < attempts) {
             lastError = error;
-            await new Promise((r) => setTimeout(r, attempt * 1500));
+            await new Promise((r) => setTimeout(r, attempt * 3000));
             continue;
           }
           throw error;
@@ -91,7 +91,7 @@ function bramaCompleter(cfg, fetch_) {
           // A 200 with no content happens intermittently on reasoning
           // routes (the token cap burns on hidden thinking). Same class of
           // transient as a 502 — retry instead of killing the loop.
-          await new Promise((r) => setTimeout(r, attempt * 1500));
+          await new Promise((r) => setTimeout(r, attempt * 3000));
           continue;
         }
         return { text, stopReason: body.choices?.[0]?.finish_reason };
