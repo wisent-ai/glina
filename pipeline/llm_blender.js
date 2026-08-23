@@ -134,6 +134,7 @@ export async function sculptWithLlm(job, config, deps = {}) {
   try {
     const tools = await session.listTools().catch(() => []);
     let exported = false;
+    let consecutiveBridgeFailures = 0;
     let rounds = 0;
 
     for (let round = 1; round <= maxRounds; round += 1) {
@@ -155,7 +156,20 @@ export async function sculptWithLlm(job, config, deps = {}) {
           execResult = String(await session.execute(step.code));
         } catch (error) {
           execResult = `ERROR: ${error.message}`;
+          consecutiveBridgeFailures += 1;
+          // The model cannot heal a dead bridge; probing through the LLM
+          // only burns rounds. Three consecutive transport failures end
+          // the run with the cause named.
+          if (consecutiveBridgeFailures >= 3) {
+            throw new SculptError(`Blender bridge is down after ${consecutiveBridgeFailures} consecutive failures: ${error.message}`, {
+              round,
+              cause: error,
+            });
+          }
         }
+      }
+      if (execResult !== null && !String(execResult).startsWith('ERROR:')) {
+        consecutiveBridgeFailures = 0;
       }
 
       if (step.done === true) {

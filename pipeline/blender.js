@@ -122,14 +122,22 @@ export class BlenderSession {
     return this.execute(code);
   }
 
-  /** Convenience: export the whole scene as GLB. */
+  /** Convenience: export the whole scene as GLB. Verifies the file landed. */
   async exportGlb(path) {
     const code = [
       'import bpy',
       `bpy.ops.export_scene.gltf(filepath=${JSON.stringify(path)}, export_format='GLB')`,
       'print("exported", ' + JSON.stringify(path) + ')',
     ].join('\n');
-    return this.execute(code);
+    await this.execute(code);
+    const { stat } = await import('node:fs/promises');
+    try {
+      const info = await stat(path);
+      if (!(info.size > 0)) throw new Error(`empty file (${info.size} bytes)`);
+    } catch (error) {
+      throw new BlenderError(`export produced no file at ${path}: ${error.message}`);
+    }
+    return path;
   }
 
   async close() {
