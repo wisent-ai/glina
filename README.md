@@ -24,8 +24,11 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
    local Chromium/profile.
 3. **Blender**: only via a Blender MCP server (`uvx blender-mcp` default),
    never hand-rolled sockets.
-4. **Model access**: ONLY via [Brama](https://github.com/wisent-ai/brama), the
-   org model router. There is NO direct provider API code in this package —
+4. **Model access**: [Brama](https://github.com/wisent-ai/brama), the org
+   model router, is the default and the only fleet path. When the operator
+   sanctions it in the config (`models.openrouter` + `models.backend`), the
+   [OpenRouter](https://openrouter.ai) API is an approved alternative — the
+   key still comes from Skarbiec. No other direct provider APIs exist here;
    direct paths were deleted at the owner's demand, not gated.
 
 ## Install
