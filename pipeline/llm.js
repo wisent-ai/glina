@@ -87,6 +87,13 @@ function bramaCompleter(cfg, fetch_) {
           throw error;
         }
         const text = body.choices?.[0]?.message?.content ?? '';
+        if (!text.trim() && attempt < attempts) {
+          // A 200 with no content happens intermittently on reasoning
+          // routes (the token cap burns on hidden thinking). Same class of
+          // transient as a 502 — retry instead of killing the loop.
+          await new Promise((r) => setTimeout(r, attempt * 1500));
+          continue;
+        }
         return { text, stopReason: body.choices?.[0]?.finish_reason };
       } catch (error) {
         if (error instanceof LlmError) throw error;
