@@ -137,8 +137,7 @@ export async function sculptWithLlm(job, config, deps = {}) {
     let rounds = 0;
 
     for (let round = 1; round <= maxRounds; round += 1) {
-      rounds = round;
-      const reply = await complete({ system: SYSTEM_PROMPT, messages, maxTokens: 4096 });
+      const reply = await complete({ system: SYSTEM_PROMPT, messages, maxTokens: job.maxTokens ?? config.llm?.maxTokens ?? 8192 });
       transcript.push(reply.text);
       let step;
       try {
