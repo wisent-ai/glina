@@ -119,12 +119,18 @@ export class BlenderSession {
     const code = [
       'import bpy',
       // Data-API cleanup only — read_factory_settings would wipe the
-      // addon's scene properties and kill the MCP server thread.
+      // addon's scene properties and kill the MCP server thread. Actions are
+      // equally load-bearing: leaving old `flap` Actions made preview choose
+      // a stale clip after repeated imports.
       'for obj in list(bpy.data.objects): bpy.data.objects.remove(obj, do_unlink=True)',
+      'for action in list(bpy.data.actions): bpy.data.actions.remove(action)',
+      'for mesh in list(bpy.data.meshes): bpy.data.meshes.remove(mesh)',
+      'for arm in list(bpy.data.armatures): bpy.data.armatures.remove(arm)',
+      'for mat in list(bpy.data.materials): bpy.data.materials.remove(mat)',
       format === 'glb'
         ? `bpy.ops.import_scene.gltf(filepath=${JSON.stringify(path)})`
         : `bpy.ops.wm.obj_import(filepath=${JSON.stringify(path)})`,
-      'print("imported", len(bpy.data.objects), "objects")',
+      'print("imported", len(bpy.data.objects), "objects", len(bpy.data.actions), "actions")',
     ].join('\n');
     return this.execute(code);
   }

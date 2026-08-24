@@ -178,17 +178,15 @@ def key(name, frame, rotation):
     item.rotation_euler = rotation
     item.keyframe_insert(data_path='rotation_euler', frame=frame, group=name)
 
-# Flap: broad mirrored wing arcs + body lift.
+# Flap: wings only. The root and tail stay fixed so visual motion cannot be
+# confused with the old up/down bob.
 reset_pose()
 flap = bpy.data.actions.new('flap')
 flap.use_fake_user = True
 arm.animation_data.action = flap
 for frame, amount in [(1,-1.0),(7,1.0),(13,-1.0),(19,1.0),(25,-1.0)]:
-    arm.location = (0,0,0.35*amount)
-    arm.keyframe_insert(data_path='location', frame=frame)
-    key('wing.L', frame, (0.0, 0.95*amount, 0.30*amount))
-    key('wing.R', frame, (0.0, -0.95*amount, -0.30*amount))
-    key('tail1', frame, (0.0,0.0,0.10*amount))
+    key('wing.L', frame, (0.0, 0.0, 1.50*amount))
+    key('wing.R', frame, (0.0, 0.0, -1.50*amount))
 
 # Idle: breathing, head nod, travelling tail sway.
 reset_pose()
