@@ -1,0 +1,132 @@
+[
+  {
+    "output": "docs/index.md",
+    "sources": ["README.md", "package.json", "docs/what-is-glina.md"],
+    "instruction": "Maintain the concise English documentation index and links to every Glina concept, interface, walkthrough, runbook, desktop, and examples page."
+  },
+  {
+    "output": "docs/what-is-glina.md",
+    "sources": ["README.md", "package.json", "src/index.js", "pipeline/cli.js", "pipeline/config.js", "pipeline/verify.js"],
+    "instruction": "Explain what Glina is, its runtime-art and authoring-pipeline halves, hard external ownership boundaries, verification definition of done, and next-page links; remain public-safe."
+  },
+  {
+    "output": "docs/quick-start.md",
+    "sources": ["package.json", "pipeline/cli.js", "pipeline/setup.js", "pipeline/config.js", "pipeline/verify.js", "pipeline.config.example.json", "assets/models/smok.glb"],
+    "instruction": "Maintain an English quick start that distinguishes captured non-mutating evidence from stateful generation commands, includes observed CLI/verify/setup/config output, and never implies registry publication."
+  },
+  {
+    "output": "docs/architecture.md",
+    "sources": ["src/index.js", "pipeline/cli.js", "pipeline/config.js", "pipeline/skarbiec.js", "pipeline/weles.js", "pipeline/blender.js", "pipeline/llm_blender.js", "pipeline/text2game.js", "pipeline/verify.js", "pipeline/serve.js"],
+    "instruction": "Describe Glina components, dependency and trust boundaries, data flow, ownership versus Skarbiec/Weles/Brama/Blender/Desktop, and process/artifact lifecycles."
+  },
+  {
+    "output": "docs/configuration.md",
+    "sources": ["pipeline.config.example.json", "pipeline/config.js", "pipeline/skarbiec.js", "pipeline/llm.js", "pipeline/llm_blender.js", "pipeline/text2game.js", "pipeline/verify.js", "pipeline/blender.js", "pipeline/cli.js"],
+    "instruction": "Document every configuration key actually read by Glina with types, defaults, precedence/selection behavior, strict Skarbiec-only secret policy, environment behavior, and resolved handoff semantics."
+  },
+  {
+    "output": "docs/cli.md",
+    "sources": ["pipeline/cli.js", "pipeline/setup.js", "pipeline/preview.js", "pipeline/animate.js", "pipeline/showcase.js", "pipeline/verify.js"],
+    "instruction": "Maintain the complete Glina CLI command, argument, output, side-effect, refusal, and exit-code reference, including the operational export-config command."
+  },
+  {
+    "output": "docs/mcp.md",
+    "sources": ["pipeline/mcp.js", "pipeline/verify.js", "pipeline/text2game.js", "pipeline/llm_blender.js"],
+    "instruction": "Document the full glina-mcp newline JSON-RPC protocol, handshake/errors, all six tools, exact schemas, return/refusal semantics, and captured verify evidence."
+  },
+  {
+    "output": "docs/http.md",
+    "sources": ["pipeline/serve.js", "pipeline/cli.js", "pipeline/verify.js", "pipeline/preview.js"],
+    "instruction": "Document every loopback HTTP endpoint, request/response schema, NDJSON ordering and terminal status, queue behavior, limits, exact errors, and executed evidence."
+  },
+  {
+    "output": "docs/runtime-api.md",
+    "sources": ["package.json", "released-surface.json", "src/index.js", "src/anatomy.js", "src/sculpt.js", "src/sculpt-gear.js", "src/card-art.js", "src/loader.js"],
+    "instruction": "Maintain a complete public JavaScript export reference including signatures, defaults, return/mutation contracts, environmental dependencies, subpaths, and loader stub behavior."
+  },
+  {
+    "output": "docs/desktop.md",
+    "sources": ["pipeline/serve.js", "../glina-desktop/Sources/GlinaDesktop/GlinaBackend.swift", "../glina-desktop/Sources/GlinaDesktop/GlinaClient.swift"],
+    "instruction": "Explain the separate macOS companion's executable discovery, backend lifecycle, HTTP mappings, NDJSON consumption, refusals, and operator safety boundary without claiming desktop ownership for Glina."
+  },
+  {
+    "output": "docs/runbook.md",
+    "sources": ["pipeline/config.js", "pipeline/skarbiec.js", "pipeline/llm.js", "pipeline/llm_blender.js", "pipeline/blender.js", "pipeline/weles.js", "pipeline/text2game.js", "pipeline/verify.js", "pipeline/preview.js", "pipeline/serve.js", "scripts/ensure-blender.sh"],
+    "instruction": "Maintain a symptom-first operations runbook grounded in exact source refusal strings, safe probe order, recovery actions, and warnings before stateful live-Blender operations."
+  },
+  {
+    "output": "docs/examples.md",
+    "sources": ["docs/examples/verify-asset.sh", "docs/examples/check-config.sh", "docs/examples/serve-verify.sh", "docs/examples/mcp-verify.sh", "docs/examples/card-art.mjs", "assets/models/smok.glb"],
+    "instruction": "Index all runnable examples, external-system requirements, commands, already-captured outputs, and the no-live-Blender safety boundary."
+  },
+  {
+    "output": "docs/walkthrough-verify.md",
+    "sources": ["docs/examples/verify-asset.sh", "pipeline/verify.js", "assets/models/smok.glb"],
+    "instruction": "Preserve the executed passing and deliberately failing structural verification walkthrough with exact observed statistics, thresholds, refusals, and exit interpretation."
+  },
+  {
+    "output": "docs/walkthrough-serve.md",
+    "sources": ["docs/examples/serve-verify.sh", "pipeline/serve.js", "pipeline/verify.js", "assets/models/smok.glb"],
+    "instruction": "Preserve the executed ephemeral loopback HTTP walkthrough with exact health and NDJSON verify evidence, consumer rules, and an explicit no-Blender-interaction boundary."
+  },
+  {
+    "output": "docs/concepts/sculpt-job.md",
+    "sources": ["pipeline/llm_blender.js", "pipeline/llm.js", "pipeline/blender.js", "pipeline/verify.js", "README.md"],
+    "instruction": "Explain the sculpt-job noun, model step contract, round loop, bridge-down invariant, export/gate lifecycle, result shape, and historical proven runs."
+  },
+  {
+    "output": "docs/concepts/studio-job.md",
+    "sources": ["pipeline/text2game.js", "pipeline/weles.js", "pipeline/blender.js", "pipeline/verify.js", "pipeline.config.example.json"],
+    "instruction": "Explain the studio-job noun, every named step, config-driven selectors, download/postprocess/gate path, return shape, credentials boundary, and cleanup invariant."
+  },
+  {
+    "output": "docs/concepts/verification-gate.md",
+    "sources": ["pipeline/verify.js", "assets/models/smok.glb"],
+    "instruction": "Explain the verification-gate noun, structural and optional render layers, report/stats meaning, every threshold/default, lifecycle, and exact parser/gate refusals."
+  },
+  {
+    "output": "docs/concepts/blender-session.md",
+    "sources": ["pipeline/blender.js", "pipeline/weles.js", "pipeline/setup.js", "scripts/ensure-blender.sh"],
+    "instruction": "Explain the Blender-session noun, spawn/tool/environment boundaries, exception wrapping, import/export cleanup, real health probe, bridge port, and close invariants."
+  },
+  {
+    "output": "docs/concepts/browser-session.md",
+    "sources": ["pipeline/weles.js", "pipeline/text2game.js", "pipeline/skarbiec.js"],
+    "instruction": "Explain the Weles browser-session noun, complete tool surface, lifecycle, timeout and exact refusals, scrubbed environment, and which allowlisted environment names are not actually consumed."
+  },
+  {
+    "output": "docs/concepts/model-backend.md",
+    "sources": ["pipeline/llm.js", "pipeline/llm_blender.js", "pipeline.config.example.json"],
+    "instruction": "Explain Brama/OpenRouter backend selection exactly as implemented, transport signing/retry/deadline behavior, direct-provider refusal, message conversion, and reply parsing."
+  },
+  {
+    "output": "docs/concepts/runtime-art.md",
+    "sources": ["package.json", "src/index.js", "src/anatomy.js", "src/sculpt.js", "src/sculpt-gear.js", "src/card-art.js", "src/loader.js"],
+    "instruction": "Explain the runtime-art noun, module responsibilities and host dependencies, card-art decisions, executed example evidence, and procedural-only loader stubs."
+  },
+  {
+    "output": "docs/examples/verify-asset.sh",
+    "sources": ["pipeline/cli.js", "pipeline/verify.js", "assets/models/smok.glb"],
+    "instruction": "Maintain a portable, self-cleaning shell example that runs default verification and catches a deliberate multi-reason refusal without Blender, Weles, vault, or network use."
+  },
+  {
+    "output": "docs/examples/check-config.sh",
+    "sources": ["pipeline/cli.js", "pipeline/config.js", "pipeline/skarbiec.js"],
+    "instruction": "Maintain a portable, self-cleaning shell example that accepts a non-secret config and demonstrates exact inline-secret refusal without contacting the vault."
+  },
+  {
+    "output": "docs/examples/serve-verify.sh",
+    "sources": ["pipeline/cli.js", "pipeline/serve.js", "pipeline/verify.js", "assets/models/smok.glb"],
+    "instruction": "Maintain a portable, self-cleaning example that owns an ephemeral Glina backend, observes readiness and health, streams local verification, and reliably terminates it without Blender access."
+  },
+  {
+    "output": "docs/examples/mcp-verify.sh",
+    "sources": ["pipeline/mcp.js", "pipeline/verify.js", "assets/models/smok.glb"],
+    "instruction": "Maintain a portable raw stdio MCP example covering initialize, initialized notification, tools/list, and local glina_verify_asset with an absent optional config."
+  },
+  {
+    "output": "docs/examples/card-art.mjs",
+    "sources": ["src/card-art.js"],
+    "instruction": "Maintain a dependency-free Node example that imports the checkout's cardArtSvg, writes one dwarven rare forge SVG to a caller-selected or temporary path, and reports output size."
+  }
+]
