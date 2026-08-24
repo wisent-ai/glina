@@ -188,14 +188,14 @@ for frame, amount in [(1,-1.0),(7,1.0),(13,-1.0),(19,1.0),(25,-1.0)]:
     key('wing.L', frame, (0.0, 0.0, 1.50*amount))
     key('wing.R', frame, (0.0, 0.0, -1.50*amount))
 
-# Idle: breathing, head nod, travelling tail sway.
+# Idle: head nod and travelling tail sway. The armature root is never keyed:
+# neither exported clip is allowed to translate the whole model.
 reset_pose()
+arm.location = (0,0,0)
 idle = bpy.data.actions.new('idle')
 idle.use_fake_user = True
 arm.animation_data.action = idle
 for frame, amount in [(1,-1.0),(13,1.0),(25,-1.0),(37,1.0),(49,-1.0)]:
-    arm.location = (0,0,0.08*amount)
-    arm.keyframe_insert(data_path='location', frame=frame)
     key('head', frame, (0.08*amount,0,0))
     key('tail1', frame, (0,0,0.14*amount))
     key('tail2', frame, (0,0,-0.22*amount))

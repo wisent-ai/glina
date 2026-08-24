@@ -7,8 +7,7 @@
 // image library is ever vendored here.
 
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { BlenderSession } from './blender.js';
 
@@ -90,7 +89,7 @@ export async function renderAnimationPreview({
 } = {}) {
   if (!glbPath) throw new PreviewError('glbPath is required');
   const session = await BlenderSession.start(sessionOptions ?? {});
-  const dir = await mkdtemp(join(tmpdir(), 'glina-preview-'));
+  const dir = await mkdtemp(join(dirname(outPath ?? glbPath), '.glina-preview-'));
   const framesDir = join(dir, 'frames');
   try {
     const { mkdir } = await import('node:fs/promises');
