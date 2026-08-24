@@ -17,6 +17,7 @@ import { provisionBlender } from './setup.js';
 import { verifyAsset } from './verify.js';
 import { sculptWithLlm } from './llm_blender.js';
 import { renderAnimationPreview } from './preview.js';
+import { animatePreset } from './animate.js';
 
 
 function redactSecrets(node, path = []) {
@@ -68,6 +69,8 @@ commands:
                                   LLM (Opus) iteratively builds the model in Blender
   preview-anim <file.glb> [--clip name] [--frames n] [--fps n] [--out f.gif]
                                   render an animated GIF of one clip through Blender
+  animate <file.glb> [--preset dragon] [--out animated.glb]
+                                  apply deterministic, visibly moving actions
   verify <file.glb> [--config path]   structural + optional render gate
   check-config [--config path]
   weles-tools
@@ -189,6 +192,29 @@ async function main() {
         { onRound: (r) => console.error(`[round ${r.round}] ${r.step.thought ?? ''}`) },
       );
       console.log(JSON.stringify({ ...result, transcript: undefined, rounds: result.rounds }, null, 2));
+      return;
+    }
+    case 'animate': {
+      const file = positional[0];
+      if (!file) {
+        console.error('error: animate requires a .glb path');
+        process.exitCode = 2;
+        return;
+      }
+      let config = {};
+      try {
+        config = await loadPipelineConfig(configPath);
+      } catch {
+        // config optional — blender.mcp defaults apply without it
+      }
+      const output = options.out ?? file.replace(/\.glb$/i, '-animated.glb');
+      const result = await animatePreset({
+        inputPath: file,
+        outputPath: output,
+        preset: options.preset ?? 'dragon',
+        sessionOptions: config.blender?.mcp,
+      });
+      console.log(JSON.stringify(result, null, 2));
       return;
     }
     case 'preview-anim': {

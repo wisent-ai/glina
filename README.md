@@ -47,6 +47,7 @@ glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
 glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
 glina verify assets/models/tower.glb                 # GLB quality gate
 glina preview-anim assets/models/dragon.glb          # animated GIF of one clip
+glina animate assets/models/dragon.glb --preset dragon --out dragon-animated.glb
 glina blender-health                                 # probe the Blender session
 glina weles-tools                                    # list browser-layer tools
 ```
@@ -60,16 +61,16 @@ MCP tools for agent hosts (`glina-mcp`): `glina_create_asset`,
 Sculpt jobs whose config sets `verify.requireAnimations` / `verify.minAnimationClips`
 produce rigged assets: the model builds an armature, parents the mesh with
 automatic weights, and keyframes named Actions ("idle" plus one characteristic
-motion). The verification gate counts clips and refuses static meshes.
-`preview-anim` renders one clip through Blender into a looping GIF so an
-animation can be judged without opening a DCC.
+motion). `animate` supplies deterministic, visibly moving presets when an
+LLM-authored clip is structurally present but visually static. `preview-anim`
+renders one clip through Blender into a looping GIF.
 
 ## Verification gate
 
 Every produced `.glb` passes `pipeline/verify.js`: valid glTF container,
 mesh/primitive sanity, triangle budget (default 6000 ±100%), materials/skins/
-animation clips (with required minimums), file-size bounds, optional Blender
-render smoke. The gate fails the job; it never warns.
+animation clips and changing animation channels, file-size bounds, optional
+Blender render smoke. The gate fails the job; it never warns.
 
 ## Proven results
 

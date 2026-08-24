@@ -98,6 +98,45 @@ export function glbStats(json) {
   };
 }
 
+/** Count animation channels whose output samples actually change. */
+export function animationMotionStats(buffer, json) {
+  const components = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+  const jsonLength = buffer.readUInt32LE(12);
+  const binaryHeader = 20 + jsonLength;
+  const binaryStart = binaryHeader + 8;
+  let animationChannels = 0;
+  let movingAnimationChannels = 0;
+  for (const animation of json.animations ?? []) {
+    for (const channel of animation.channels ?? []) {
+      animationChannels += 1;
+      const sampler = animation.samplers?.[channel.sampler];
+      const accessor = sampler ? json.accessors?.[sampler.output] : null;
+      const view = accessor ? json.bufferViews?.[accessor.bufferView] : null;
+      const width = accessor ? components[accessor.type] : null;
+      if (!accessor || !view || !width || accessor.componentType !== 5126 || accessor.count < 2) continue;
+      const stride = view.byteStride ?? width * 4;
+      const start = binaryStart + (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+      let moves = false;
+      for (let sample = 1; sample < accessor.count && !moves; sample += 1) {
+        for (let component = 0; component < width; component += 1) {
+          const first = buffer.readFloatLE(start + component * 4);
+          const current = buffer.readFloatLE(start + sample * stride + component * 4);
+          if (Math.abs(first - current) > 0.00001) {
+            moves = true;
+            break;
+          }
+        }
+      }
+      if (moves) movingAnimationChannels += 1;
+    }
+  }
+  return {
+    animationChannels,
+    movingAnimationChannels,
+    staticAnimationChannels: animationChannels - movingAnimationChannels,
+  };
+}
+
 /**
  * Structural gate on a GLB file. Returns a report:
  *   { ok, errors, stats, thresholds, path }
@@ -108,7 +147,7 @@ export async function verifyGlbStructure(path, thresholds = {}) {
   const t = { ...DEFAULT_THRESHOLDS, ...thresholds };
   const buffer = await readFile(path);
   const { json, errors: parseWarnings } = parseGlb(buffer);
-  const stats = glbStats(json);
+  const stats = { ...glbStats(json), ...animationMotionStats(buffer, json) };
 
   const errors = [...parseWarnings];
   if (buffer.length < t.minBytes) errors.push(`file too small: ${buffer.length}B < ${t.minBytes}B`);
@@ -125,6 +164,11 @@ export async function verifyGlbStructure(path, thresholds = {}) {
     errors.push(
       `too few animation clips: ${stats.animations} < ${t.minAnimationClips}` +
         (stats.animationNames.length ? ` [${stats.animationNames.join(', ')}]` : ''),
+    );
+  }
+  if (t.requireAnimations && stats.movingAnimationChannels === 0) {
+    errors.push(
+      `animation clips contain no changing channels: ${stats.animationChannels} channel(s), all static`,
     );
   }
 
