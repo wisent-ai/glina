@@ -116,8 +116,7 @@
       "output": "docs/desktop.md",
       "sources": [
         "pipeline/serve.js",
-        "../glina-desktop/Sources/GlinaDesktop/GlinaBackend.swift",
-        "../glina-desktop/Sources/GlinaDesktop/GlinaClient.swift"
+        "README.md"
       ],
       "instruction": "Explain the separate macOS companion's executable discovery, backend lifecycle, HTTP mappings, NDJSON consumption, refusals, and operator safety boundary without claiming desktop ownership for Glina."
     },
