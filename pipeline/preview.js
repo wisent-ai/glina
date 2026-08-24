@@ -28,17 +28,23 @@ function runBin(bin, args) {
 /** Build a looping GIF from frame_###.png files in framesDir. */
 export async function assembleGif(framesDir, outPath, fps = 10) {
   const palette = join(framesDir, 'palette.png');
+  // ImageIO exposes GIF delta rectangles as individual CGImages. Glina's
+  // frame-driven player therefore needs every encoded frame to cover the full
+  // canvas; otherwise a moving wing's small delta rectangle is centered and
+  // the whole dragon appears to jump.
+  const gifFlags = '-offsetting-transdiff';
   let attempt = await runBin('ffmpeg', [
     '-y', '-framerate', String(fps), '-i', join(framesDir, 'frame_%03d.png'),
     '-i', palette, '-lavfi', 'palettegen=stats_mode=diff [p]; [0:v][p] paletteuse=dither=bayer',
-    '-loop', '0', outPath,
+    '-loop', '0', '-gifflags', gifFlags, outPath,
   ]);
   // Two-pass palette needs the palette to exist first; generate then reuse.
   if (!attempt.ok || !(await readdirSafeSize(outPath))) {
     await runBin('ffmpeg', ['-y', '-i', join(framesDir, 'frame_%03d.png'), '-vf', 'palettegen=stats_mode=diff', palette]);
     attempt = await runBin('ffmpeg', [
       '-y', '-framerate', String(fps), '-i', join(framesDir, 'frame_%03d.png'),
-      '-i', palette, '-lavfi', '[0:v][1:v] paletteuse=dither=bayer', '-loop', '0', outPath,
+      '-i', palette, '-lavfi', '[0:v][1:v] paletteuse=dither=bayer',
+      '-loop', '0', '-gifflags', gifFlags, outPath,
     ]);
   }
   if (attempt.ok && (await readdirSafeSize(outPath))) return { tool: 'ffmpeg' };
@@ -50,7 +56,7 @@ export async function assembleGif(framesDir, outPath, fps = 10) {
     'assert frames, "no frames rendered"',
     'imgs = [Image.open(f).convert("P", palette=Image.ADAPTIVE, colors=128) for f in frames]',
     `d, ms = ${JSON.stringify(outPath)}, ${Math.round(1000 / fps)}`,
-    'imgs[0].save(d, save_all=True, append_images=imgs[1:], duration=ms, loop=0)',
+    'imgs[0].save(d, save_all=True, append_images=imgs[1:], duration=ms, loop=0, optimize=False, disposal=2)',
     'print("gif-bytes", os.path.getsize(d))',
   ].join('\n');
   const viaUv = await runBin('uv', ['run', '--with', 'pillow', 'python', '-c', py]);
