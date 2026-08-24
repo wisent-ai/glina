@@ -65,24 +65,28 @@ def cone_between(name, start, end, r1, r2, mat, vertices=6):
 
 def wing(name, side):
     sx = float(side)
-    verts = [
-        (0.55*sx, 0.35, 1.25),
-        (1.55*sx, 0.45, 1.35),
-        (2.65*sx, 0.20, 1.10),
-        (2.25*sx, -0.55, 0.55),
-        (1.25*sx, -0.20, 0.78),
-        (0.70*sx, -0.25, 0.95),
-    ]
-    mesh = bpy.data.meshes.new(name + 'Mesh')
-    mesh.from_pydata(verts, [], [(0,1,4,5), (1,2,3,4)])
-    mesh.materials.append(wing_mat)
-    obj = bpy.data.objects.new(name, mesh)
-    scene.collection.objects.link(obj)
-    flat(obj)
-    # Bone-finger rods make the wing silhouette readable.
-    cone_between(name + '.finger.top', verts[0], verts[2], 0.07, 0.04, scale_mat)
-    cone_between(name + '.finger.low', verts[0], verts[3], 0.06, 0.03, scale_mat)
-    return obj
+    root = (0.55*sx, 0.35, 1.25)
+    elbow = (1.55*sx, 0.45, 1.35)
+    tip = (2.65*sx, 0.20, 1.10)
+    trailing_tip = (2.25*sx, -0.55, 0.55)
+    trailing_elbow = (1.25*sx, -0.20, 0.78)
+    trailing_root = (0.70*sx, -0.25, 0.95)
+
+    def membrane(suffix, verts):
+        mesh = bpy.data.meshes.new(name + suffix + 'Mesh')
+        mesh.from_pydata(verts, [], [tuple(range(len(verts)))])
+        mesh.materials.append(wing_mat)
+        obj = bpy.data.objects.new(name + suffix, mesh)
+        scene.collection.objects.link(obj)
+        flat(obj)
+        return obj
+
+    inner = membrane('.inner', [root, elbow, trailing_elbow, trailing_root])
+    outer = membrane('.outer', [elbow, tip, trailing_tip, trailing_elbow])
+    # The outer spars follow the wrist, letting the membrane fold on recovery.
+    top_finger = cone_between(name + '.finger.top', elbow, tip, 0.07, 0.04, scale_mat)
+    low_finger = cone_between(name + '.finger.low', elbow, trailing_tip, 0.06, 0.03, scale_mat)
+    return inner, outer, top_finger, low_finger
 
 # Cohesive readable silhouette, oriented along +Y.
 body = ico('Body', (0, 0, 1.05), (0.95, 1.55, 0.82), scale_mat, 2)
@@ -137,8 +141,10 @@ def bone(name, head, tail, parent=None):
     return item
 bone('body', (0,0,0.4), (0,0,1.55))
 bone('head', (0,1.30,1.35), (0,2.55,1.70), 'body')
-bone('wing.L', (0.55,0.35,1.25), (2.55,0.20,1.10), 'body')
-bone('wing.R', (-0.55,0.35,1.25), (-2.55,0.20,1.10), 'body')
+bone('wing.L.shoulder', (0.55,0.35,1.25), (1.55,0.45,1.35), 'body')
+bone('wing.L.wrist', (1.55,0.45,1.35), (2.65,0.20,1.10), 'wing.L.shoulder')
+bone('wing.R.shoulder', (-0.55,0.35,1.25), (-1.55,0.45,1.35), 'body')
+bone('wing.R.wrist', (-1.55,0.45,1.35), (-2.65,0.20,1.10), 'wing.R.shoulder')
 bone('tail1', (0,-1.10,0.95), (0,-2.10,0.78), 'body')
 bone('tail2', (0,-2.10,0.78), (0,-3.05,0.52), 'tail1')
 bone('tail3', (0,-3.05,0.52), (0,-4.25,0.28), 'tail2')
@@ -155,11 +161,14 @@ for obj in [body, chest, neck] + legs:
     bone_parent(obj, 'body')
 for obj in [head, snout] + [o for o in bpy.data.objects if o.name.startswith(('Horn.','Eye.'))]:
     bone_parent(obj, 'head')
-bone_parent(left_wing, 'wing.L')
-bone_parent(right_wing, 'wing.R')
-for obj in bpy.data.objects:
-    if obj.name.startswith('Wing.L.finger'): bone_parent(obj, 'wing.L')
-    if obj.name.startswith('Wing.R.finger'): bone_parent(obj, 'wing.R')
+bone_parent(left_wing[0], 'wing.L.shoulder')
+bone_parent(left_wing[1], 'wing.L.wrist')
+bone_parent(left_wing[2], 'wing.L.wrist')
+bone_parent(left_wing[3], 'wing.L.wrist')
+bone_parent(right_wing[0], 'wing.R.shoulder')
+bone_parent(right_wing[1], 'wing.R.wrist')
+bone_parent(right_wing[2], 'wing.R.wrist')
+bone_parent(right_wing[3], 'wing.R.wrist')
 for index, obj in enumerate(tails):
     bone_parent(obj, ['tail1','tail2','tail3','tail3'][index])
 for obj in bpy.data.objects:
@@ -178,15 +187,26 @@ def key(name, frame, rotation):
     item.rotation_euler = rotation
     item.keyframe_insert(data_path='rotation_euler', frame=frame, group=name)
 
-# Flap: wings only. The root and tail stay fixed so visual motion cannot be
-# confused with the old up/down bob.
+# Flap: a fast, open downstroke and slower folded recovery. Shoulder and
+# wrist peak at different times, so the membrane bends instead of rotating as
+# one rigid board. The first and last poses match for a clean loop.
 reset_pose()
 flap = bpy.data.actions.new('flap')
 flap.use_fake_user = True
 arm.animation_data.action = flap
-for frame, amount in [(1,-1.0),(7,1.0),(13,-1.0),(19,1.0),(25,-1.0)]:
-    key('wing.L', frame, (0.0, 0.0, 1.50*amount))
-    key('wing.R', frame, (0.0, 0.0, -1.50*amount))
+for frame, shoulder, wrist in [
+    (1, 0.58, -0.28),
+    (4, 0.20, -0.05),
+    (8, -0.62, 0.34),
+    (12, -0.28, 0.12),
+    (17, 0.18, -0.38),
+    (21, 0.50, -0.32),
+    (25, 0.58, -0.28),
+]:
+    key('wing.L.shoulder', frame, (0.0, 0.0, shoulder))
+    key('wing.R.shoulder', frame, (0.0, 0.0, -shoulder))
+    key('wing.L.wrist', frame, (0.0, 0.0, wrist))
+    key('wing.R.wrist', frame, (0.0, 0.0, -wrist))
 
 # Idle: head nod and travelling tail sway. The armature root is never keyed:
 # neither exported clip is allowed to translate the whole model.
