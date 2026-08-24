@@ -135,7 +135,7 @@ export async function renderAnimationPreview({
       '    cam_data = bpy.data.cameras.new("preview-cam")',
       '    cam = bpy.data.objects.new("preview-cam", cam_data)',
       '    bpy.context.scene.collection.objects.link(cam)',
-      '    direction = Vector((1.0, -1.4, 0.7)).normalized()',
+      '    direction = Vector((1.1, -1.6, 1.25)).normalized()',
       '    cam.location = center + direction * (radius * 2.6)',
       '    look = center - cam.location',
       '    cam.rotation_euler = look.to_track_quat("-Z", "Y").to_euler()',

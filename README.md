@@ -48,6 +48,7 @@ glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles bro
 glina verify assets/models/tower.glb                 # GLB quality gate
 glina preview-anim assets/models/dragon.glb          # animated GIF of one clip
 glina animate assets/models/dragon.glb --preset dragon --out dragon-animated.glb
+glina showcase dragon --out assets/models/smok.glb   # cohesive animated reference
 glina blender-health                                 # probe the Blender session
 glina weles-tools                                    # list browser-layer tools
 ```
@@ -64,6 +65,10 @@ automatic weights, and keyframes named Actions ("idle" plus one characteristic
 motion). `animate` supplies deterministic, visibly moving presets when an
 LLM-authored clip is structurally present but visually static. `preview-anim`
 renders one clip through Blender into a looping GIF.
+
+`showcase dragon` builds a deterministic cohesive reference asset — rigid
+mesh parts bone-parented to a compact armature — for animation regression and
+visual review. It replaces the disconnected LLM prototype.
 
 ## Verification gate
 

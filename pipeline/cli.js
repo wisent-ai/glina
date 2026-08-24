@@ -9,6 +9,9 @@
 // Credentials: resolved ONLY from Skarbiec (skarbiec:// refs in the config).
 // Browser:     driven ONLY through the Weles MCP server.
 
+import { resolve as resolvePath } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './text2game.js';
 import { McpStdioClient } from './weles.js';
@@ -18,9 +21,10 @@ import { verifyAsset } from './verify.js';
 import { sculptWithLlm } from './llm_blender.js';
 import { renderAnimationPreview } from './preview.js';
 import { animatePreset } from './animate.js';
+import { buildShowcase } from './showcase.js';
 
 
-function redactSecrets(node, path = []) {
+export function redactSecrets(node, path = []) {
   if (Array.isArray(node)) return node.map((v, i) => redactSecrets(v, [...path, i]));
   if (node && typeof node === 'object') {
     const out = {};
@@ -71,9 +75,12 @@ commands:
                                   render an animated GIF of one clip through Blender
   animate <file.glb> [--preset dragon] [--out animated.glb]
                                   apply deterministic, visibly moving actions
+  showcase dragon [--out dragon.glb]
+                                  build a cohesive animated reference asset
   verify <file.glb> [--config path]   structural + optional render gate
   check-config [--config path]
   weles-tools
+  serve [--port n] [--config path]   loopback HTTP/JSON backend for desktop apps
   blender-health              MCP handshake + execute_blender_code probe
   setup [--check] [--dry-run] provision Blender + uv + blender-mcp
 
@@ -108,6 +115,17 @@ async function main() {
     case 'check-config': {
       const config = await loadPipelineConfig(configPath);
       console.log(JSON.stringify(redactSecrets(config), null, 2));
+      return;
+    }
+    case 'serve': {
+      const port = options.port === undefined ? 8080 : Number(options.port);
+      if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        console.error('error: serve requires --port <n> (0 = ephemeral)');
+        process.exitCode = 2;
+        return;
+      }
+      const { startServe } = await import('./serve.js');
+      await startServe({ port, configPath });
       return;
     }
     case 'weles-tools': {
@@ -194,6 +212,23 @@ async function main() {
       console.log(JSON.stringify({ ...result, transcript: undefined, rounds: result.rounds }, null, 2));
       return;
     }
+    case 'showcase': {
+      const asset = positional[0] ?? 'dragon';
+      let config = {};
+      try {
+        config = await loadPipelineConfig(configPath);
+      } catch {
+        // config optional — blender.mcp defaults apply without it
+      }
+      const output = options.out ?? `assets/models/${asset}-showcase.glb`;
+      const result = await buildShowcase({
+        asset,
+        outputPath: output,
+        sessionOptions: config.blender?.mcp,
+      });
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
     case 'animate': {
       const file = positional[0];
       if (!file) {
@@ -251,7 +286,13 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(`error: ${error.message}`);
-  process.exitCode = 1;
-});
+// Run main() only when invoked directly — serve.js imports redactSecrets
+// from this module without taking over the process.
+const invokedDirectly =
+  process.argv[1] && fileURLToPath(import.meta.url) === resolvePath(process.argv[1]);
+if (invokedDirectly) {
+  main().catch((error) => {
+    console.error(`error: ${error.message}`);
+    process.exitCode = 1;
+  });
+}
