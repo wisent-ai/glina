@@ -16,8 +16,7 @@
     "src",
     "assets",
     "pipeline",
-    "pipeline.config.example.json",
-    "SKILL.md"
+    "pipeline.config.example.json"
   ],
   "keywords": [
     "threejs",
