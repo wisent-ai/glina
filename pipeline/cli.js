@@ -22,6 +22,7 @@ import { sculptWithLlm } from './llm_blender.js';
 import { renderAnimationPreview } from './preview.js';
 import { animatePreset } from './animate.js';
 import { buildShowcase } from './showcase.js';
+import { recordAssetQualityGatePassed, runOnboarding } from './onboarding.js';
 
 
 export function redactSecrets(node, path = []) {
@@ -68,6 +69,7 @@ function parseArgs(argv) {
 const USAGE = `usage: node pipeline/cli.js <command> [args]
 
 commands:
+  onboarding [--reset]             first-run walkthrough, replayed on demand
   create <prompt> [--race r] [--out dir] [--config path]
   sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]
                                   LLM (Opus) iteratively builds the model in Blender
@@ -110,6 +112,10 @@ async function main() {
         config,
       );
       console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    case 'onboarding': {
+      await runOnboarding({ reset: Boolean(options.reset) });
       return;
     }
     case 'check-config': {
@@ -187,6 +193,7 @@ async function main() {
         // config is optional for verify — defaults kick in without it
       }
       const report = await verifyAsset(file, config);
+      if (report.ok) await recordAssetQualityGatePassed();
       console.log(JSON.stringify(report, null, 2));
       if (!report.ok) process.exitCode = 1;
       return;

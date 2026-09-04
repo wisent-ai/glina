@@ -27,6 +27,7 @@
     "cmd:blender-health",
     "cmd:check-config",
     "cmd:create",
+    "cmd:onboarding",
     "cmd:preview-anim",
     "cmd:sculpt",
     "cmd:serve",

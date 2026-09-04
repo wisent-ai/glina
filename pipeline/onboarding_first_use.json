@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "product_id": "glina",
+  "journey_id": "first-use",
+  "journey_version": "2026-09-03.1",
+  "entry_screen_id": "command-routes",
+  "first_success_fact": "asset_quality_gate_passed",
+  "published_at": "2026-09-03T00:00:00Z",
+  "source_revision": "glina-first-use-2026-09-03.1",
+  "screens": [
+    {
+      "screen_id": "command-routes",
+      "screen_kind": "explanation",
+      "title_key": "glina.first_use.routes.title",
+      "body_key": "glina.first_use.routes.body",
+      "required": true,
+      "actions": ["advance"],
+      "transitions": [
+        {
+          "next_screen_id": "quality-gate",
+          "reason_code": "command_routes_explained",
+          "priority": 10
+        }
+      ],
+      "presentation": {
+        "title": "Choose the route that owns the job",
+        "body": "Besides this walkthrough, Glina's CLI routes are `check-config`, `create`, `sculpt`, `verify`, `animate`, `preview-anim`, `showcase`, `setup`, `blender-health`, `weles-tools`, and `serve`. Creation uses the configured model, Blender, and browser services; verification reads an existing GLB and applies the quality gate."
+      }
+    },
+    {
+      "screen_id": "quality-gate",
+      "screen_kind": "explanation",
+      "title_key": "glina.first_use.gate.title",
+      "body_key": "glina.first_use.gate.body",
+      "required": true,
+      "actions": ["advance"],
+      "transitions": [
+        {
+          "next_screen_id": "verify-an-asset",
+          "reason_code": "quality_gate_explained",
+          "priority": 10
+        }
+      ],
+      "presentation": {
+        "title": "A result counts only after the gate passes",
+        "body": "`glina verify` parses the GLB, measures its meshes, triangles, materials, and animations, and checks those facts against the active limits. It exits unsuccessfully when the artifact is broken or outside the contract instead of turning a failed gate into a warning."
+      }
+    },
+    {
+      "screen_id": "verify-an-asset",
+      "screen_kind": "guided_query",
+      "title_key": "glina.first_use.verify.title",
+      "body_key": "glina.first_use.verify.body",
+      "required": true,
+      "completion_evidence": {
+        "kind": "fact",
+        "fact": "asset_quality_gate_passed",
+        "operator": "eq",
+        "value": true
+      },
+      "actions": ["verify"],
+      "transitions": [],
+      "presentation": {
+        "title": "Pass one real asset through the quality gate",
+        "body": "Run the verifier on a GLB you intend to use. The first report whose `ok` value is `true` is this journey's first success; Glina records it only after the real quality gate has accepted that file.",
+        "command": "glina verify PATH/TO/ASSET.glb",
+        "result": "A JSON quality report with `ok: true`, measured asset statistics, and the limits that accepted them"
+      }
+    }
+  ],
+  "analytics_contract": {
+    "contract_version": "1",
+    "surface": "cli_first_use",
+    "exposure_event": "onboarding_step_viewed",
+    "primary_action_event": "onboarding_step_completed",
+    "completion_event": "onboarding_completed",
+    "first_success_event": "onboarding_first_success_observed"
+  }
+}

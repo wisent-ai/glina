@@ -42,6 +42,7 @@ Bins: `glina` (CLI) and `glina-mcp` (MCP stdio server for agents).
 ## Use
 
 ```sh
+glina onboarding [--reset]                         # first-run walkthrough or replay
 glina check-config                                   # validate config + vault refs
 glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
 glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
