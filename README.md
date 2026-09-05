@@ -42,13 +42,15 @@ Bins: `glina` (CLI) and `glina-mcp` (MCP stdio server for agents).
 ## Use
 
 ```sh
-glina onboarding [--reset]                         # first-run walkthrough or replay
+glina onboarding [--reset] [--asset existing.glb]   # first-run import or replay
+glina import existing.glb [--name asset-id]          # validate, persist, activate
+glina workspace                                      # inspect retained assets
 glina check-config                                   # validate config + vault refs
 glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
 glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
-glina verify assets/models/tower.glb                 # GLB quality gate
-glina preview-anim assets/models/dragon.glb          # animated GIF of one clip
-glina animate assets/models/dragon.glb --preset dragon --out dragon-animated.glb
+glina verify [assets/models/tower.glb]               # explicit or active GLB gate
+glina preview-anim [assets/models/dragon.glb]        # explicit or active animation preview
+glina animate [assets/models/dragon.glb] --preset dragon --out dragon-animated.glb
 glina showcase dragon --out assets/models/smok.glb   # cohesive animated reference
 glina blender-health                                 # probe the Blender session
 glina weles-tools                                    # list browser-layer tools
@@ -57,6 +59,14 @@ glina weles-tools                                    # list browser-layer tools
 MCP tools for agent hosts (`glina-mcp`): `glina_create_asset`,
 `glina_sculpt`, `glina_verify_asset`, `glina_check_config`,
 `glina_blender_health`, `glina_weles_tools`.
+
+`glina import` accepts existing GLB data without invoking a model. It stages the
+exact bytes, runs `pipeline/verify.js` (including configured Blender smoke),
+then commits only an accepted asset under `$XDG_DATA_HOME/glina` or
+`~/.local/share/glina`. Repeated SHA-256 content is `unchanged`; the same name
+with different content is `conflicting`; invalid data is `rejected` without a
+partial manifest update. The active destination is the default for `verify`,
+`animate`, and `preview-anim` when their path is omitted.
 
 ## Animations
 

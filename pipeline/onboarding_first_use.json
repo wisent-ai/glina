@@ -2,29 +2,29 @@
   "schema_version": 1,
   "product_id": "glina",
   "journey_id": "first-use",
-  "journey_version": "2026-09-03.1",
-  "entry_screen_id": "command-routes",
-  "first_success_fact": "asset_quality_gate_passed",
-  "published_at": "2026-09-03T00:00:00Z",
-  "source_revision": "glina-first-use-2026-09-03.1",
+  "journey_version": "2026-09-05.1",
+  "entry_screen_id": "existing-assets",
+  "first_success_fact": "asset_imported",
+  "published_at": "2026-09-05T00:00:00Z",
+  "source_revision": "glina-first-use-2026-09-05.1",
   "screens": [
     {
-      "screen_id": "command-routes",
+      "screen_id": "existing-assets",
       "screen_kind": "explanation",
-      "title_key": "glina.first_use.routes.title",
-      "body_key": "glina.first_use.routes.body",
+      "title_key": "glina.first_use.assets.title",
+      "body_key": "glina.first_use.assets.body",
       "required": true,
       "actions": ["advance"],
       "transitions": [
         {
           "next_screen_id": "quality-gate",
-          "reason_code": "command_routes_explained",
+          "reason_code": "existing_assets_explained",
           "priority": 10
         }
       ],
       "presentation": {
-        "title": "Choose the route that owns the job",
-        "body": "Besides this walkthrough, Glina's CLI routes are `check-config`, `create`, `sculpt`, `verify`, `animate`, `preview-anim`, `showcase`, `setup`, `blender-health`, `weles-tools`, and `serve`. Creation uses the configured model, Blender, and browser services; verification reads an existing GLB and applies the quality gate."
+        "title": "Start with an asset you already own",
+        "body": "Glina imports an existing GLB through the same structural and optional Blender gate used by generated work. The accepted copy becomes the active workspace asset; no generation or model call is made."
       }
     },
     {
@@ -36,7 +36,7 @@
       "actions": ["advance"],
       "transitions": [
         {
-          "next_screen_id": "verify-an-asset",
+          "next_screen_id": "import-an-asset",
           "reason_code": "quality_gate_explained",
           "priority": 10
         }
@@ -47,24 +47,24 @@
       }
     },
     {
-      "screen_id": "verify-an-asset",
+      "screen_id": "import-an-asset",
       "screen_kind": "guided_query",
-      "title_key": "glina.first_use.verify.title",
-      "body_key": "glina.first_use.verify.body",
+      "title_key": "glina.first_use.import.title",
+      "body_key": "glina.first_use.import.body",
       "required": true,
       "completion_evidence": {
         "kind": "fact",
-        "fact": "asset_quality_gate_passed",
+        "fact": "asset_imported",
         "operator": "eq",
         "value": true
       },
-      "actions": ["verify"],
+      "actions": ["import_asset"],
       "transitions": [],
       "presentation": {
-        "title": "Pass one real asset through the quality gate",
-        "body": "Run the verifier on a GLB you intend to use. The first report whose `ok` value is `true` is this journey's first success; Glina records it only after the real quality gate has accepted that file.",
-        "command": "glina verify PATH/TO/ASSET.glb",
-        "result": "A JSON quality report with `ok: true`, measured asset statistics, and the limits that accepted them"
+        "title": "Import the GLB you want to keep working on",
+        "body": "Run the import on a real GLB. Glina validates the staged bytes before committing them, preserves existing assets, reports repeated content as unchanged and name collisions as conflicting, then makes an accepted destination the default for verify, animate, and preview-anim.",
+        "command": "glina onboarding --asset PATH/TO/ASSET.glb",
+        "result": "A JSON result with imported or unchanged status, the durable destination path, and the quality report that accepted it"
       }
     }
   ],

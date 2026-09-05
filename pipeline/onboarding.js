@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { importAsset } from './workspace.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFINITION = path.join(here, 'onboarding_first_use.json');
@@ -46,24 +47,24 @@ function screensInOrder(definition) {
   return ordered;
 }
 
-/** Record the fact only after the real verification gate returns an accepted report. */
-export async function recordAssetQualityGatePassed() {
-  try {
-    const progress = (await readProgress()) ?? {};
-    if (progress.status === 'completed') return;
-    const definition = await readDefinition();
-    await writeProgress({
-      ...progress,
-      product_id: definition.product_id,
-      journey_id: definition.journey_id,
-      journey_version: definition.journey_version,
-      status: 'completed',
-      evidence: { [definition.first_success_fact]: true },
-      completed_at: new Date().toISOString(),
-    });
-  } catch {
-    // Onboarding progress must never turn an accepted asset into a failed command.
-  }
+/** Record the fact only after the workspace accepted and persisted a real asset. */
+export async function recordAssetImported(asset) {
+  const progress = (await readProgress()) ?? {};
+  if (progress.status === 'completed') return;
+  const definition = await readDefinition();
+  await writeProgress({
+    ...progress,
+    product_id: definition.product_id,
+    journey_id: definition.journey_id,
+    journey_version: definition.journey_version,
+    status: 'completed',
+    evidence: {
+      [definition.first_success_fact]: true,
+      asset_path: asset.path,
+      asset_id: asset.id,
+    },
+    completed_at: new Date().toISOString(),
+  });
 }
 
 export async function runOnboarding(options = {}) {
@@ -93,6 +94,18 @@ export async function runOnboarding(options = {}) {
       started_at: new Date().toISOString(),
     });
   }
+  if (options.asset) {
+    const report = await importAsset(options.asset, {
+      name: options.name,
+      config: options.config ?? {},
+    });
+    if (report.status === 'imported' || report.status === 'unchanged') {
+      await recordAssetImported(report);
+      progress = await readProgress();
+    }
+    console.log(JSON.stringify(report, null, 2));
+    return report;
+  }
 
   const done = progress?.status === 'completed';
   if (reset) {
@@ -107,7 +120,7 @@ export async function runOnboarding(options = {}) {
   }
   console.log(
     done
-      ? `First-run journey already complete: ${definition.first_success_fact} was observed on an earlier run.`
-      : `No asset has passed Glina's quality gate from this shell yet, so ${definition.first_success_fact} is still open; the next successful verify closes it.`,
+      ? `First-run journey already complete: ${definition.first_success_fact} was observed on an accepted import.`
+      : `No existing asset has been accepted into Glina's workspace yet, so ${definition.first_success_fact} is still open; import one with the command shown above.`,
   );
 }

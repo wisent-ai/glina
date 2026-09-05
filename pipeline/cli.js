@@ -22,7 +22,8 @@ import { sculptWithLlm } from './llm_blender.js';
 import { renderAnimationPreview } from './preview.js';
 import { animatePreset } from './animate.js';
 import { buildShowcase } from './showcase.js';
-import { recordAssetQualityGatePassed, runOnboarding } from './onboarding.js';
+import { recordAssetImported, runOnboarding } from './onboarding.js';
+import { activeAssetPath, importAsset, workspaceSummary } from './workspace.js';
 
 
 export function redactSecrets(node, path = []) {
@@ -69,17 +70,21 @@ function parseArgs(argv) {
 const USAGE = `usage: node pipeline/cli.js <command> [args]
 
 commands:
-  onboarding [--reset]             first-run walkthrough, replayed on demand
+  onboarding [--reset] [--asset file.glb] [--name id]
+                                  first-run import or walkthrough replay
+  import <file.glb> [--name id] [--config path]
+                                  validate, persist, and activate an existing asset
+  workspace                       list imported assets and the active input
   create <prompt> [--race r] [--out dir] [--config path]
   sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]
                                   LLM (Opus) iteratively builds the model in Blender
-  preview-anim <file.glb> [--clip name] [--frames n] [--fps n] [--out f.gif]
+  preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif]
                                   render an animated GIF of one clip through Blender
-  animate <file.glb> [--preset dragon] [--out animated.glb]
+  animate [file.glb] [--preset dragon] [--out animated.glb]
                                   apply deterministic, visibly moving actions
   showcase dragon [--out dragon.glb]
                                   build a cohesive animated reference asset
-  verify <file.glb> [--config path]   structural + optional render gate
+  verify [file.glb] [--config path]   structural + optional render gate
   check-config [--config path]
   weles-tools
   serve [--port n] [--config path]   loopback HTTP/JSON backend for desktop apps
@@ -115,7 +120,42 @@ async function main() {
       return;
     }
     case 'onboarding': {
-      await runOnboarding({ reset: Boolean(options.reset) });
+      let config = {};
+      try {
+        config = await loadPipelineConfig(configPath);
+      } catch {
+        // Configuration is optional for local import; the built-in gate applies.
+      }
+      const report = await runOnboarding({
+        reset: Boolean(options.reset),
+        asset: options.asset,
+        name: options.name,
+        config,
+      });
+      if (report && report.status !== 'imported' && report.status !== 'unchanged') {
+        process.exitCode = 1;
+      }
+      return;
+    }
+    case 'import': {
+      const source = positional[0];
+      let config = {};
+      try {
+        config = await loadPipelineConfig(configPath);
+      } catch {
+        // Configuration is optional for local import; the built-in gate applies.
+      }
+      const report = await importAsset(source, { name: options.name, config });
+      if (report.status === 'imported' || report.status === 'unchanged') {
+        await recordAssetImported(report);
+      } else {
+        process.exitCode = 1;
+      }
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+    case 'workspace': {
+      console.log(JSON.stringify(await workspaceSummary(), null, 2));
       return;
     }
     case 'check-config': {
@@ -180,9 +220,9 @@ async function main() {
       return;
     }
     case 'verify': {
-      const file = positional[0];
+      const file = positional[0] ?? await activeAssetPath();
       if (!file) {
-        console.error('error: verify requires a .glb path');
+        console.error('error: verify requires a .glb path or an active imported asset');
         process.exitCode = 2;
         return;
       }
@@ -193,7 +233,6 @@ async function main() {
         // config is optional for verify — defaults kick in without it
       }
       const report = await verifyAsset(file, config);
-      if (report.ok) await recordAssetQualityGatePassed();
       console.log(JSON.stringify(report, null, 2));
       if (!report.ok) process.exitCode = 1;
       return;
@@ -237,9 +276,9 @@ async function main() {
       return;
     }
     case 'animate': {
-      const file = positional[0];
+      const file = positional[0] ?? await activeAssetPath();
       if (!file) {
-        console.error('error: animate requires a .glb path');
+        console.error('error: animate requires a .glb path or an active imported asset');
         process.exitCode = 2;
         return;
       }
@@ -260,9 +299,9 @@ async function main() {
       return;
     }
     case 'preview-anim': {
-      const file = positional[0];
+      const file = positional[0] ?? await activeAssetPath();
       if (!file) {
-        console.error('error: preview-anim requires a .glb path');
+        console.error('error: preview-anim requires a .glb path or an active imported asset');
         process.exitCode = 2;
         return;
       }

@@ -30,6 +30,7 @@ import { renderAnimationPreview } from './preview.js';
 import { BlenderSession } from './blender.js';
 import { McpStdioClient } from './weles.js';
 import { redactSecrets } from './cli.js';
+import { importAsset, workspaceSummary } from './workspace.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -123,6 +124,14 @@ export async function startServe({ port = 8080, configPath } = {}) {
         sendError(res, 500, error);
       }
     },
+    'GET /v1/workspace': async (req, res) => {
+      try {
+        sendJson(res, 200, await workspaceSummary());
+      } catch (error) {
+        sendError(res, 500, error);
+      }
+    },
+
 
     'GET /v1/blender-health': async (req, res) => {
       try {
@@ -160,6 +169,21 @@ export async function startServe({ port = 8080, configPath } = {}) {
         sendError(res, 500, error);
       }
     },
+
+    'POST /v1/workspace/import': (req, res) =>
+      streamJob(req, res, {
+        async prepare(body) {
+          const source = typeof body.source === 'string' ? body.source : '';
+          if (!source) throw badRequest('workspace import requires a .glb source path');
+          const name = typeof body.name === 'string' && body.name ? body.name : undefined;
+          const config = await loadOptionalConfig();
+          return { source, name, config };
+        },
+        async run({ source, name, config }) {
+          const report = await importAsset(source, { name, config });
+          return { status: 0, json: report };
+        },
+      }),
 
     'POST /v1/sculpt': (req, res) =>
       streamJob(req, res, {
