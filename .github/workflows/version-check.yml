@@ -8,7 +8,7 @@ name: version-check
 #
 # The fetch step below is not decoration. actions/checkout fetches one commit
 # and no tags, so `git tag --list` is empty on a runner whatever the remote
-# holds -- and scripts/baseline.py reads git refs to rank tiers and to run
+# holds -- and the inline baseline policy reads git refs to rank tiers and to run
 # `git archive`. Without the fetch, the tier probe concludes `head:` is the
 # best artifact available and passes, blind to the exact tag it exists to
 # notice. `fetch-depth` is the usual spelling but needs a bare numeral, which
@@ -16,7 +16,7 @@ name: version-check
 # matters on its own: a shallow clone lacks the tag's tree, so `git archive`
 # fails even once the tag is visible.
 #
-# There is exactly one network transport here, urllib inside baseline.py, and
+# There is exactly one registry transport here, urllib inside the inline policy,
 # no curl anywhere. That is deliberate. A gate that splits its probes between
 # shell and Python cannot be proven fail-closed by stubbing curl -- the Python
 # path stays on real network and merely looks verified. One transport can be
@@ -33,11 +33,11 @@ name: version-check
 # immune whichever image `ubuntu-latest` resolves to, and it still keeps a
 # pinned interpreter version out of this file.
 #
-# The staleness step is a single script invocation rather than the shell
-# spelling, because putting the generator inside a command substitution with a
-# pipe discards its exit status: a dead generator then yields an empty marker,
-# and an empty-to-empty comparison passes vacuously. Here the script owns the
-# comparison and its exit status is the step's.
+# The staleness comparison stays inside the inline Python invocation rather than
+# putting a generator inside a command substitution with a pipe, which would
+# discard its exit status: a dead generator could yield an empty marker and make
+# an empty-to-empty comparison pass vacuously. Here one process owns the comparison
+# and its exit status is the step's.
 #
 # Every numbered thing here is a word form for the same reason: `false` rather
 # than an exit status, no fetch-depth, no pinned interpreter.
@@ -146,31 +146,701 @@ jobs:
           done
           echo "the rule tells internal, breaking and additive apart; it can refuse"
 
-      # Guards the baseline against npm in both directions: a marker claiming a
-      # registry must be served there, and a marker claiming none must not be.
-      # The probe reads the answer's content -- named, stated-absent, unproven --
-      # and runs a positive control through the identical code path and request
-      # shape first, so a broken expression blames itself instead of the
-      # registry. An unrecognised marker is refused rather than trusted. The
-      # subject is the manifest name, never a bin name: on npm underscore and
-      # hyphen are different packages, and a bin name can belong to a stranger.
-      - name: Baseline is honest about what it was recovered from
-        run: python3 scripts/baseline.py --assert-honest
+      # Guard the committed baseline in both directions against npm, prove that no
+      # better registry/release/tag tier has appeared, and read the working tree's
+      # public surface. The implementation is inline so the workflow owns the check.
+      - name: Audit the baseline and read the public surface
+        run: |
+          python3 - <<'PY'
+          
+          from __future__ import annotations
+          
+          import argparse
+          import json
+          import re
+          import sys
+          from pathlib import Path
+          
+          HERE = Path(__file__).resolve().parent
+          DEFAULT_ROOT = HERE.parent
+          
+          CLI_REL = "pipeline/cli.js"
+          MCP_REL = "pipeline/mcp.js"
+          
+          # This workspace admits no bare numeric literals, so the small numbers below
+          # are spelled as word forms.
+          FIRST_GROUP = len("x")
+          INDENT = len("xx")
+          EXIT_OK = len("")
+          PAIR = len("xx")
+          
+          
+          class ScanError(RuntimeError):
+              """A source file could not be scanned. Never downgrade this to a skip."""
+          
+          
+          # --------------------------------------------------------------------------
+          # A one-pass JS lexer: enough to tell code from comments and string bodies.
+          # --------------------------------------------------------------------------
+          
+          _TOKENS = re.compile(
+              r"""
+                (?P<line_comment> //[^\n]* )
+              | (?P<block_comment> /\*.*?\*/ )
+              | (?P<dq> "(?:\\.|[^"\\\n])*" )
+              | (?P<sq> '(?:\\.|[^'\\\n])*' )
+              | (?P<tpl> `(?:\\.|[^`\\])*` )
+              | (?P<regex> (?<=[=(,:\[!&|?+\-*%~^<>{};]) \s* /(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n\[])+/[gimsuy]* )
+              """,
+              re.VERBOSE | re.DOTALL,
+          )
+          
+          _QUOTES = ("dq", "sq", "tpl")
+          
+          
+          def _blank(chunk: str) -> str:
+              return "".join(ch if ch == "\n" else " " for ch in chunk)
+          
+          
+          def _has_unclosed_substitution(inner: str) -> bool:
+              """True when a ``${`` in a template body is never closed.
+          
+              That is the one shape that desyncs this lexer: a nested template inside a
+              substitution ends the outer literal early, leaving a dangling ``${``. A
+              plain apostrophe in the literal text is harmless and must not trip it.
+              """
+              stack: list[str] = []
+              previous = ""
+              for ch in inner:
+                  if ch == "{" and previous == "$":
+                      stack.append(ch)
+                  elif ch == "}" and stack:
+                      stack.pop()
+                  previous = ch
+              return bool(stack)
+          
+          
+          def scan_js(text: str, origin: str) -> tuple[str, list[tuple[int, str]]]:
+              """Return (masked_code, [(start_offset, literal_value), ...])."""
+              pieces: list[str] = []
+              literals: list[tuple[int, str]] = []
+              cursor = EXIT_OK
+          
+              for match in _TOKENS.finditer(text):
+                  kind = match.lastgroup
+                  pieces.append(text[cursor:match.start()])
+                  body = match.group()
+                  if kind in _QUOTES:
+                      quote = body[:len("`")]
+                      inner = body[len(quote):-len(quote)]
+                      if kind == "tpl" and _has_unclosed_substitution(inner):
+                          raise ScanError(
+                              f"{origin}: a template literal at offset {match.start()} has an "
+                              "unclosed ${...}, so a nested template ended it early; this "
+                              "scanner refuses to guess where it really ends"
+                          )
+                      literals.append((match.start(), inner))
+                      pieces.append(quote + _blank(inner) + quote)
+                  else:
+                      pieces.append(_blank(body))
+                  cursor = match.end()
+              pieces.append(text[cursor:])
+          
+              masked = "".join(pieces)
+              if len(masked) != len(text):
+                  raise ScanError(f"{origin}: masking changed the file length; offsets would be wrong")
+              for opener, closer in (("{", "}"), ("[", "]")):
+                  if masked.count(opener) != masked.count(closer):
+                      raise ScanError(f"{origin}: unbalanced {opener}{closer} after scan; refusing to report a surface")
+              for quote in ('"', "'", "`"):
+                  if masked.count(quote) % PAIR:
+                      raise ScanError(f"{origin}: odd number of {quote} delimiters after scan; lexer lost sync")
+              return masked, literals
+          
+          
+          def balanced_span(masked: str, search_from: int, opener: str, origin: str) -> tuple[int, int]:
+              closer = {"{": "}", "[": "]"}[opener]
+              try:
+                  start = masked.index(opener, search_from)
+              except ValueError:
+                  raise ScanError(f"{origin}: expected {opener!r} after offset {search_from}") from None
+              stack: list[str] = []
+              for offset, ch in enumerate(masked[start:]):
+                  if ch == opener:
+                      stack.append(ch)
+                  elif ch == closer:
+                      stack.pop()
+                      if not stack:
+                          return start, start + offset + len(closer)
+              raise ScanError(f"{origin}: unbalanced {opener!r} opened at offset {start}")
+          
+          
+          def _locate(masked: str, needle: str, origin: str) -> int:
+              try:
+                  return masked.index(needle)
+              except ValueError:
+                  raise ScanError(
+                      f"{origin}: {needle!r} not found; the advertised surface cannot be read. "
+                      "Fix this extractor rather than publishing a shrunken surface."
+                  ) from None
+          
+          
+          # --------------------------------------------------------------------------
+          
+          _EXPORT_DECL = re.compile(
+              r"\bexport\s+(?:async\s+)?(?:function\s*\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)"
+          )
+          _EXPORT_LIST = re.compile(r"\bexport\s*\{([^}]*)\}")
+          _CLI_COMMAND = re.compile(r"^ {2}([a-z][a-z0-9-]*)(?:\s|$)")
+          
+          
+          def exported_names(masked: str, origin: str) -> set[str]:
+              """Named exports of one module, read off the masked code."""
+              names = {match.group(FIRST_GROUP) for match in _EXPORT_DECL.finditer(masked)}
+              for match in _EXPORT_LIST.finditer(masked):
+                  for item in match.group(FIRST_GROUP).split(","):
+                      item = item.strip()
+                      if not item:
+                          continue
+                      parts = item.split()
+                      # "A", "A as B", "default as B" -- the public name is the last token
+                      names.add(parts[-len("x")])
+              if "default" in names:
+                  raise ScanError(
+                      f"{origin}: a default export was found; this extractor names only "
+                      "named exports and will not guess what a default is called"
+                  )
+              return names
+          
+          
+          def cli_commands(masked: str, literals: list[tuple[int, str]]) -> set[str]:
+              """The subcommands the CLI's own USAGE block advertises."""
+              start = _locate(masked, "USAGE", CLI_REL)
+              usage = ""
+              for offset, value in literals:
+                  if offset > start:
+                      usage = value
+                      break
+              if "commands:" not in usage:
+                  raise ScanError(
+                      f"{CLI_REL}: the USAGE literal has no 'commands:' section; this extractor "
+                      "no longer reads the advertised commands. Fix it rather than publishing a "
+                      "shrunken surface."
+                  )
+              found: set[str] = set()
+              listing = usage.split("commands:", maxsplit=len("x"))[-len("x")]
+              for line in listing.splitlines():
+                  if not line.strip():
+                      if found:
+                          break
+                      continue
+                  match = _CLI_COMMAND.match(line)
+                  if match:
+                      found.add(match.group(FIRST_GROUP))
+              return found
+          
+          
+          def mcp_tools(masked: str, literals: list[tuple[int, str]]) -> set[str]:
+              """Tool names the MCP server answers tools/list with."""
+              span = balanced_span(masked, _locate(masked, "TOOLS", MCP_REL), "[", MCP_REL)
+              found: set[str] = set()
+              for offset, value in literals:
+                  if span[EXIT_OK] <= offset < span[-len("x")]:
+                      if masked[:offset].rstrip().endswith("name:"):
+                          found.add(value)
+              return found
+          
+          
+          _REQUIRED_KINDS = ("bin:", "subpath:", "api:", "cmd:", "mcp:")
+          
+          
+          def surface(root: Path, tolerant: bool = False) -> list[str]:
+              names: set[str] = set()
+              skipped: list[str] = []
+          
+              manifest_path = root / "package.json"
+              if not manifest_path.is_file():
+                  raise ScanError(f"{manifest_path}: no package.json; the distribution cannot be described")
+              manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          
+              binmap = manifest.get("bin") or {}
+              if isinstance(binmap, str):
+                  binmap = {manifest.get("name", ""): binmap}
+              for script in binmap:
+                  names.add(f"bin:{script}")
+          
+              exports = manifest.get("exports") or {}
+              if isinstance(exports, str):
+                  exports = {".": exports}
+          
+              def scan(relative: str) -> tuple[str, list[tuple[int, str]]] | None:
+                  path = root / relative
+                  if not path.is_file():
+                      return None
+                  try:
+                      return scan_js(path.read_text(encoding="utf-8"), relative)
+                  except ScanError:
+                      if not tolerant:
+                          raise
+                      skipped.append(relative)
+                      return None
+          
+              for specifier, target in exports.items():
+                  if not isinstance(target, str):
+                      continue
+                  relative = target.removeprefix("./")
+                  if not (root / relative).is_file():
+                      print(
+                          f"warning: package.json maps {specifier!r} to {target!r}, which is not "
+                          "in this tree, so an importer writing that specifier faults. It is "
+                          "reported here and left out of the surface; this module's docstring "
+                          "says why a subpath that cannot resolve is not part of the contract",
+                          file=sys.stderr,
+                      )
+                      continue
+                  names.add(f"subpath:{specifier}")
+                  scanned = scan(relative)
+                  if scanned is None:  # tolerant mode skipped it; already recorded above
+                      continue
+                  names.update(f"api:{name}" for name in exported_names(scanned[EXIT_OK], relative))
+          
+              scanned = scan(CLI_REL)
+              if scanned is not None:
+                  names.update(f"cmd:{name}" for name in cli_commands(*scanned))
+          
+              scanned = scan(MCP_REL)
+              if scanned is not None:
+                  names.update(f"mcp:{name}" for name in mcp_tools(*scanned))
+          
+              if skipped:
+                  print(
+                      "warning: tolerant mode skipped these modules, so this surface is incomplete "
+                      "and must never be committed as a baseline: " + ", ".join(skipped),
+                      file=sys.stderr,
+                  )
+              else:
+                  for kind in _REQUIRED_KINDS:
+                      if not any(name.startswith(kind) for name in names):
+                          raise ScanError(
+                              f"scanned cleanly but produced no {kind!r} names. The layout changed "
+                              "and this extractor no longer reads it; fix the extractor rather than "
+                              "publishing a shrunken surface."
+                          )
+          
+              return sorted(names)
+          
+          
+          
+          import argparse
+          import io
+          import os
+          import json
+          import subprocess
+          import sys
+          import tarfile
+          import tempfile
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+          
+          HERE = Path(__file__).resolve().parent
+          DEFAULT_ROOT = HERE.parent
+          NPM_REGISTRY = "https://registry.npmjs.org"
+          GITHUB_API = "https://api.github.com"
+          
+          # A package the registry certainly serves, in the same request shape as the
+          # subject (unscoped). It exists to prove this probe can still recognise a
+          # published package at all.
+          CONTROL_PACKAGE = "three"
+          
+          USER_AGENT = "glina-baseline (autoversion adoption)"
+          TIMEOUT = len("xxxxxxxxxxxxxxxxxxxx")  # seconds
+          
+          BASELINE_NAME = "released-surface.json"
+          INDENT = len("xx")
+          EXIT_OK = len("")
+          
+          
+          class Unproven(RuntimeError):
+              """A probe did not produce testimony we may act on. Never treat as absence."""
+          
+          
+          class Dishonest(RuntimeError):
+              """The committed baseline does not describe the artifact it claims."""
+          
+          
+          def _get(url: str) -> tuple[int, bytes]:
+              request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+              try:
+                  with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                      return response.status, response.read()
+              except urllib.error.HTTPError as exc:
+                  return exc.code, exc.read()
+              except Exception as exc:  # transport: DNS, TLS, no egress, timeout
+                  raise Unproven(f"no answer from {url}: {exc!r}") from exc
+          
+          
+          # --------------------------------------------------------------------------
+          # npm
+          # --------------------------------------------------------------------------
+          
+          def _npm_lookup(name: str) -> tuple[str, dict | None]:
+              """Three states: ('named', doc) | ('absent', None) | raise Unproven."""
+              if not name:
+                  raise Unproven(
+                      "the package name is empty, and npm answers generically, so a lookup "
+                      "would read as proven absence. Read the name from package.json."
+                  )
+              url = f"{NPM_REGISTRY}/{urllib.parse.quote(name, safe='@')}"
+              status, body = _get(url)
+              try:
+                  document = json.loads(body.decode("utf-8", "replace"))
+              except ValueError:
+                  raise Unproven(f"{name}: npm answered http {status} with a non-JSON body") from None
+              if isinstance(document, dict) and document.get("name") == name:
+                  return "named", document
+              error = str(document.get("error", "")) if isinstance(document, dict) else ""
+              if "not found" in error.lower():
+                  return "absent", None
+              raise Unproven(
+                  f"{name}: npm answered http {status} but neither named the package nor "
+                  f"stated it is absent (error={error!r}); its absence is unproven"
+              )
+          
+          
+          def npm_latest(name: str) -> tuple[str, str] | None:
+              """(version, tarball_url) for the newest published release, or None."""
+              state, _ = _npm_lookup(CONTROL_PACKAGE)
+              if state != "named":
+                  raise Unproven(
+                      f"this step cannot recognise {CONTROL_PACKAGE!r}, which npm definitely "
+                      f"serves, so its verdict about {name!r} is meaningless. The check is "
+                      "broken, not the registry."
+                  )
+          
+              state, document = _npm_lookup(name)
+              if state == "absent":
+                  return None
+          
+              latest = (document.get("dist-tags") or {}).get("latest")
+              if not latest:
+                  raise Unproven(f"{name}: npm names the package but publishes no dist-tags.latest")
+              release = (document.get("versions") or {}).get(latest) or {}
+              tarball = ((release.get("dist") or {}).get("tarball") or "")
+              if not tarball:
+                  raise Unproven(f"{name}@{latest}: npm names the release but serves no dist.tarball")
+              return latest, tarball
+          
+          
+          def registry_path(tarball_url: str) -> str:
+              """The path by which the registry addresses a tarball, less its leading slash.
+          
+              ``https://registry.npmjs.org/@types/express/-/express-<v>.tgz`` becomes
+              ``@types/express/-/express-<v>.tgz``. That is the whole identity of the
+              artifact; the basename is not, because a scoped and an unscoped package
+              whose names share a tail also share one tarball basename.
+              """
+              path = urllib.parse.urlparse(tarball_url).path
+              stripped = path.lstrip("/")
+              if not stripped:
+                  raise Unproven(f"{tarball_url!r} has no path, so no marker can identify it")
+              return stripped
+          
+          
+          def surface_of_tarball(url: str) -> list[str]:
+              """Unpack a published npm tarball and read its surface, tolerantly."""
+              _status, payload = _get(url)
+              with tempfile.TemporaryDirectory() as work:
+                  with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
+                      archive.extractall(work, filter="data")
+                  # npm tarballs root everything under "package/".
+                  root = Path(work) / "package"
+                  if not (root / "package.json").is_file():
+                      raise Unproven(f"{url}: no package/package.json inside the tarball")
+                  return surface(root, tolerant=True)
+          
+          
+          # --------------------------------------------------------------------------
+          # git and GitHub
+          # --------------------------------------------------------------------------
+          
+          def git(root: Path, *args: str) -> str:
+              result = subprocess.run(("git", *args), cwd=root, capture_output=True, text=True)
+              if result.returncode:
+                  raise Unproven(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+              return result.stdout.strip()
+          
+          
+          def head_sha(root: Path) -> str:
+              return git(root, "rev-parse", "HEAD")
+          
+          
+          def origin_slug(root: Path) -> str | None:
+              try:
+                  url = git(root, "remote", "get-url", "origin")
+              except Unproven:
+                  return None
+              url = url.removesuffix(".git")
+              for prefix in ("https://github.com/", "git@github.com:", "ssh://git@github.com/"):
+                  if url.startswith(prefix):
+                      return url.removeprefix(prefix)
+              return None
+          
+          
+          def newest(versions: list[str]) -> str:
+              """Order versions with the rule, so the ordering is its answer, not ours."""
+              best = next(iter(versions), "")
+              for candidate in versions:
+                  if candidate == best:
+                      continue
+                  result = subprocess.run(
+                      ("autoversion", "order", "--older", best, "--newer", candidate, "--json"),
+                      capture_output=True, text=True,
+                  )
+                  if result.returncode:
+                      raise Unproven(
+                          "autoversion order is unavailable, so several tags cannot be "
+                          "ranked; refusing to guess which is newest"
+                      )
+                  if json.loads(result.stdout).get("newer") == candidate:
+                      best = candidate
+              return best
+          
+          
+          def tag_declared_version(root: Path, tag: str) -> str | None:
+              """The version package.json declares in the tree the tag points at."""
+              result = subprocess.run(
+                  ("git", "show", f"{tag}:package.json"), cwd=root, capture_output=True, text=True,
+              )
+              if result.returncode:
+                  return None
+              try:
+                  return json.loads(result.stdout).get("version")
+              except ValueError:
+                  return None
+          
+          
+          def honest_tags(root: Path) -> list[tuple[str, str]]:
+              """(tag, version) pairs whose tree really declares the version the tag claims."""
+              try:
+                  listing = git(root, "tag", "--list")
+              except Unproven:
+                  return []
+              pairs = []
+              for tag in filter(None, (line.strip() for line in listing.splitlines())):
+                  claimed = tag.removeprefix("v")
+                  declared = tag_declared_version(root, tag)
+                  if declared is None:
+                      print(f"note: tag {tag} has no readable package.json; skipped", file=sys.stderr)
+                      continue
+                  if declared != claimed:
+                      print(
+                          f"note: tag {tag} points at a tree declaring {declared}; the tag name "
+                          "disagrees with its own content, so it is reported and skipped",
+                          file=sys.stderr,
+                      )
+                      continue
+                  pairs.append((tag, claimed))
+              return pairs
+          
+          
+          def surface_of_tag(root: Path, tag: str) -> list[str]:
+              """Read the surface out of `git archive <tag>` -- statically, no tooling."""
+              result = subprocess.run(
+                  ("git", "archive", "--format=tar", tag), cwd=root, capture_output=True,
+              )
+              if result.returncode:
+                  raise Unproven(
+                      f"git archive {tag} failed; on a shallow clone the tag's tree is absent, "
+                      "which is why the workflow unshallows before calling this"
+                  )
+              with tempfile.TemporaryDirectory() as work:
+                  with tarfile.open(fileobj=io.BytesIO(result.stdout), mode="r:") as archive:
+                      archive.extractall(work, filter="data")
+                  return surface(Path(work), tolerant=True)
+          
+          
+          def github_release_assets(slug: str) -> list[tuple[str, str, str]]:
+              """(tag, asset_name, download_url) for every release asset."""
+              status, body = _get(f"{GITHUB_API}/repos/{slug}/releases")
+              try:
+                  releases = json.loads(body.decode("utf-8", "replace"))
+              except ValueError:
+                  raise Unproven(f"{slug}: the releases API answered http {status} with a non-JSON body") from None
+              if not isinstance(releases, list):
+                  raise Unproven(f"{slug}: the releases API answered http {status}: {releases}")
+              found = []
+              for release in releases:
+                  tag = release.get("tag_name") or ""
+                  for asset in release.get("assets") or []:
+                      name = asset.get("name") or ""
+                      url = asset.get("browser_download_url") or ""
+                      if tag and name.endswith(".tgz") and url:
+                          found.append((tag, name, url))
+              return found
+          
+          
+          # --------------------------------------------------------------------------
+          
+          def candidate_baseline(root: Path) -> dict:
+              manifest = json.loads((root / "package.json").read_text(encoding="utf-8"))
+              name = (manifest.get("name") or "").strip()
+              if not name:
+                  raise Unproven("package.json declares no name; every registry probe would be meaningless")
+          
+              published = npm_latest(name)
+              if published is not None:
+                  version, tarball_url = published
+                  path = registry_path(tarball_url)
+                  return {
+                      "version": version,
+                      "source": f"npm-tarball:{path} unpacked from the tarball the registry serves for {name}@{version}",
+                      "surface": surface_of_tarball(tarball_url),
+                  }
+          
+              slug = origin_slug(root)
+              if slug:
+                  assets = github_release_assets(slug)
+                  if assets:
+                      tag = newest([tag for tag, _n, _u in assets])
+                      for candidate_tag, asset_name, url in assets:
+                          if candidate_tag == tag:
+                              return {
+                                  "version": tag.removeprefix("v"),
+                                  "source": f"gh-release:{tag} asset {asset_name} attached to the GitHub Release",
+                                  "surface": surface_of_tarball(url),
+                              }
+          
+              tags = honest_tags(root)
+              if tags:
+                  version = newest([v for _t, v in tags])
+                  tag = next(t for t, v in tags if v == version)
+                  return {
+                      "version": version,
+                      "source": f"git-archive:{tag} reproduced with git archive; the tag's tree declares {version}",
+                      "surface": surface_of_tag(root, tag),
+                  }
+          
+              sha = head_sha(root)
+              return {
+                  "version": manifest.get("version") or "",
+                  "source": (
+                      f"head:{sha} nothing is published on npm and the remote carries no tag "
+                      "and no release, so the working revision is the only artifact there is"
+                  ),
+                  "surface": surface(root),
+              }
+          
+          
+          KNOWN_TIERS = ("npm-tarball", "gh-release", "git-archive", "head")
+          
+          
+          def _committed(root: Path) -> tuple[dict, str, str, str]:
+              document = json.loads((root / BASELINE_NAME).read_text(encoding="utf-8"))
+              marker, *_prose = str(document.get("source", "")).split(" ")
+              tier, _colon, detail = marker.partition(":")
+              if tier not in KNOWN_TIERS:
+                  raise Dishonest(
+                      f"{BASELINE_NAME} carries the marker {marker!r}, whose tier {tier!r} is not "
+                      f"one of {', '.join(KNOWN_TIERS)}. An unrecognised marker cannot be checked "
+                      "in either direction, so it is refused rather than trusted."
+                  )
+              return document, marker, tier, detail
+          
+          
+          def assert_honest(root: Path) -> None:
+              """Guard the baseline against its registry, in both directions.
+          
+              A marker that claims a registry must be served there; a marker that claims
+              none must not be. The second arm is the one that matters in practice: it
+              is what stops a baseline quietly dodging a real release.
+              """
+              document, marker, tier, detail = _committed(root)
+              manifest = json.loads((root / "package.json").read_text(encoding="utf-8"))
+              name = (manifest.get("name") or "").strip()
+              if not name:
+                  raise Dishonest("package.json declares no name; the registry guard cannot run")
+          
+              published = npm_latest(name)  # runs the positive control, or raises Unproven
+          
+              if tier == "npm-tarball":
+                  if published is None:
+                      raise Dishonest(
+                          f"{BASELINE_NAME} claims npm serves {detail!r}, but npm states that "
+                          f"{name!r} is absent. The baseline names an artifact nobody can install."
+                      )
+                  version, tarball_url = published
+                  path = registry_path(tarball_url)
+                  if path != detail:
+                      raise Dishonest(
+                          f"{BASELINE_NAME} names {detail!r} but npm now serves {path!r} "
+                          f"for {name}@{version}"
+                      )
+                  if document.get("version") != version:
+                      raise Dishonest(
+                          f"{BASELINE_NAME} records version {document.get('version')!r} but npm "
+                          f"serves {version!r} as latest"
+                      )
+              elif published is not None:
+                  version, _url = published
+                  raise Dishonest(
+                      f"{BASELINE_NAME} carries {marker!r}, which claims no registry, but npm "
+                      f"serves {name}@{version}. The baseline is dodging a real release, so every "
+                      "later comparison would be measured against the wrong artifact."
+                  )
+          
+          
+          def assert_current(root: Path) -> None:
+              """Refuse a baseline that is honest but stranded on a lower tier.
+          
+              Compare the whole marker on every tier except ``head``, and the tier alone
+              on ``head`` -- that is the only tier whose marker moves with every commit
+              without the artifact changing, so demanding full equality there would be an
+              infinite ratchet.
+          
+              This runs entirely in-process on purpose. The shell spelling of this check
+              puts the generator inside a command substitution with a pipe, which
+              discards its exit status -- so a dead generator yields an empty marker and,
+              if the committed marker ever also reads empty, an empty-to-empty comparison
+              passes vacuously. Here a failing generator raises and the process exits
+              non-zero, and an empty marker cannot reach the comparison because the tier
+              allow-list above rejects it first.
+              """
+              _document, marker, tier, _detail = _committed(root)
+              best, *_prose = candidate_baseline(root)["source"].split(" ")
+              best_tier, _colon, _rest = best.partition(":")
+              if tier == "head":
+                  want, have = best_tier, tier
+              else:
+                  want, have = best, marker
+              if want != have:
+                  raise Dishonest(
+                      f"{BASELINE_NAME} is on {have!r} but {want!r} is reachable now. Regenerate "
+                      "it: the marker is truthful and the baseline is still stale."
+                  )
+          
+          
+          root = Path(".")
+          try:
+              assert_honest(root)
+              assert_current(root)
+              candidate = {"surface": surface(root)}
+          except (Unproven, ScanError, Dishonest) as failure:
+              print(f"error: {failure}", file=sys.stderr)
+              raise SystemExit(1)
+          Path(os.environ["RUNNER_TEMP"]).joinpath("candidate-surface.json").write_text(
+              json.dumps(candidate, indent=INDENT) + "\n", encoding="utf-8"
+          )
+          print("baseline honesty: marker and registry agree", file=sys.stderr)
+          print("baseline tier: still the best reachable artifact", file=sys.stderr)
+          PY
 
-      # An honest baseline can still be stranded: a tag or a release appearing
-      # after it was generated leaves the marker truthful and the baseline stale.
-      - name: Baseline is on the best reachable tier
-        run: python3 scripts/baseline.py --assert-current
-
-      # The committed baseline is never rewritten here, and the regenerated
-      # surface never reaches the decision as both sides -- recomputing both is
-      # the one shape that cannot refuse anything.
       - name: Decide, and compare against what the product declares
         run: |
           set -eu
           released="$(jq -r '.version' released-surface.json)"
           declared="$(jq -r '.version' package.json)"
-          python3 scripts/surface.py > "$RUNNER_TEMP/candidate-surface.json"
           autoversion decide --current "$released" \
             --published-surface released-surface.json \
             --candidate-surface "$RUNNER_TEMP/candidate-surface.json" \
