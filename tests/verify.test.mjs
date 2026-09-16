@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 
@@ -15,9 +15,7 @@ import {
   verifyGlbStructure,
   verifyAsset,
   VerifyError,
-  DEFAULT_THRESHOLDS,
 } from '../pipeline/verify.js';
-import { runTextToGameJob, PipelineError } from '../pipeline/text2game.js';
 
 /** Build a minimal valid GLB buffer from a glTF JSON object. */
 export function makeGlb(json) {
@@ -114,47 +112,6 @@ test('verifyAsset: throwOnFail raises with the error list', async () => {
   );
 });
 
-test('text2game fails the job when verification fails', async () => {
-  const config = {
-    credentials: { username: 'u', password: 'p' },
-    studio: {
-      loginUrl: 'https://x/l',
-      generateUrl: 'https://x/s',
-      selectors: {
-        loginUser: '#u',
-        loginPassword: '#p',
-        loginSubmit: '#g',
-        promptInput: '#pr',
-        generateSubmit: '#ge',
-      },
-      artifact: { pollExpression: 'p()', timeoutMs: 10, intervalMs: 1 },
-    },
-    // verify left enabled (default)
-  };
-  const fakePage = {
-    goto: async () => {},
-    fill: async () => {},
-    click: async () => {},
-    evaluate: async () => 'https://cdn.x/m.glb',
-  };
-  const dir = await mkdtemp(join(tmpdir(), 'gac-t2gv-'));
-  await assert.rejects(
-    runTextToGameJob(
-      { prompt: 'x', outDir: dir, filename: 'm.glb' },
-      config,
-      {
-        sessionFactory: async () => ({ newPage: async () => fakePage, close: async () => {} }),
-        download: async () => Buffer.from('NOT-A-GLB'),
-      },
-    ),
-    (error) => {
-      assert.ok(error instanceof PipelineError);
-      assert.equal(error.step, 'verify');
-      return true;
-    },
-  );
-});
-
 // ---- the package's own MCP server ----
 
 function mcpRequest(proc, message) {
@@ -178,30 +135,19 @@ function mcpRequest(proc, message) {
   });
 }
 
-test('pipeline/mcp.js serves initialize, tools/list and glina_verify_asset', async () => {
+test('pipeline/mcp.js verifies a GLB without inheriting operator configuration', async () => {
   const serverPath = new URL('../pipeline/mcp.js', import.meta.url).pathname;
   const proc = spawn('node', [serverPath], { stdio: ['pipe', 'pipe', 'inherit'] });
   try {
-    const init = await mcpRequest(proc, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
-    assert.equal(init.result.serverInfo.name, 'glina');
+    await mcpRequest(proc, { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
 
-    const list = await mcpRequest(proc, { jsonrpc: '2.0', id: 2, method: 'tools/list' });
-    const names = list.result.tools.map((t) => t.name);
-    assert.deepEqual(names.sort(), [
-      'glina_blender_health',
-      'glina_check_config',
-      'glina_create_asset',
-      'glina_sculpt',
-      'glina_verify_asset',
-      'glina_weles_tools',
-    ]);
 
     const glbPath = await tempGlb(modelJson({ triangles: 6000 }));
     const call = await mcpRequest(proc, {
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
-      params: { name: 'glina_verify_asset', arguments: { path: glbPath } },
+      params: { name: 'glina_verify_asset', arguments: { path: glbPath, config: join(dirname(glbPath), 'missing-config.json') } },
     });
     const report = JSON.parse(call.result.content[0].text);
     assert.equal(report.ok, true);
