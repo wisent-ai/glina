@@ -31,62 +31,11 @@ import { BlenderSession } from '../blender.js';
 import { McpStdioClient } from '../host/weles.js';
 import { redactSecrets } from '../cli.js';
 import { importAsset, workspaceSummary } from '../host/workspace.js';
-
-const MAX_BODY_BYTES = 1024 * 1024;
-
-function sendJson(res, status, document) {
-  const body = JSON.stringify(document, null, 2);
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(body);
-}
-
-function sendError(res, status, error) {
-  sendJson(res, status, { error: error instanceof Error ? error.message : String(error) });
-}
-
-function badRequest(message) {
-  return Object.assign(new Error(message), { status: 400 });
-}
-
-async function readJsonBody(req) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw badRequest('request body too large');
-    chunks.push(chunk);
-  }
-  const text = Buffer.concat(chunks).toString('utf8');
-  try {
-    return text.trim() ? JSON.parse(text) : {};
-  } catch {
-    throw badRequest('request body is not valid JSON');
-  }
-}
+import { badRequest, captureConsole, readJsonBody, sendError, sendJson } from "./http.js";
 
 /**
- * Redirect console output into NDJSON log events while a job runs.
- * Returns the restore function. The job functions log through console.*
- * (directly and inside the MCP/Blender layers), so patching console is how
- * the process's own stdout/stderr interleaving reaches the stream.
- */
-function captureConsole(emit) {
-  const original = {
-    log: console.log,
-    info: console.info,
-    warn: console.warn,
-    error: console.error,
-  };
-  console.log = console.info = (...args) => emit('stdout', `${format(...args)}\n`);
-  console.warn = console.error = (...args) => emit('stderr', `${format(...args)}\n`);
-  return () => Object.assign(console, original);
-}
-
-/**
- * Start the serve backend.
- * @param {object} opts { port, configPath }
- * @returns {Promise<{port: number}>} resolves once bound (server keeps the
- *   process alive; it serves until killed).
+ * Start the loopback job server: one NDJSON stream per job, one job at a
+ * time, and no browser opened by this process.
  */
 export async function startServe({ port = 8080, configPath } = {}) {
   // After the ready line stdout is protocol-clean: anything the process
