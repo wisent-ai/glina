@@ -4,8 +4,8 @@
 // preset is the boring, reproducible repair path: import the GLB, keyframe
 // explicit pose deltas, export, then let the normal gate inspect the result.
 
-import { BlenderSession } from '../blender.js';
-import { verifyAsset } from '../verify.js';
+import { BlenderSession } from '../gate/blender.js';
+import { verifyAsset } from '../gate/verify.js';
 
 export class AnimateError extends Error {}
 

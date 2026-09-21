@@ -9,8 +9,8 @@
     "./anatomy": "./src/anatomy.js",
     "./sculpt": "./src/sculpt.js",
     "./sculpt-gear": "./src/sculpt-gear.js",
-    "./card-art": "./src/card-art.js",
-    "./loader": "./src/loader.js"
+    "./card-art": "./src/art/card-art.js",
+    "./loader": "./src/art/loader.js"
   },
   "files": [
     "src",

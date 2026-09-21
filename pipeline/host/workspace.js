@@ -7,7 +7,7 @@ import { chmod, copyFile, link, mkdir, open, readFile, realpath, rename, rm, sta
 import os from 'node:os';
 import path from 'node:path';
 
-import { verifyAsset } from '../verify.js';
+import { verifyAsset } from '../gate/verify.js';
 
 const WORKSPACE_SCHEMA = 'glina.workspace.v1';
 

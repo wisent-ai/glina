@@ -10,7 +10,7 @@
 // executed through execute_blender_code, so the wrapper stays tiny and
 // every Blender behavior lives in config-driven code strings.
 
-import { McpStdioClient, WelesError } from './host/weles.js';
+import { McpStdioClient, WelesError } from '../host/weles.js';
 
 export class BlenderError extends Error {
   constructor(message, { code, cause } = {}) {

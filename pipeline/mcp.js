@@ -9,8 +9,8 @@
 import readline from 'node:readline';
 import { loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './show/text2game.js';
-import { verifyAsset } from './verify.js';
-import { BlenderSession } from './blender.js';
+import { verifyAsset } from './gate/verify.js';
+import { BlenderSession } from './gate/blender.js';
 import { McpStdioClient } from './host/weles.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
 

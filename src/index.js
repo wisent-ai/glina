@@ -14,7 +14,7 @@ export {
   buildExtraDetails,
   buildCape,
 } from './sculpt-gear.js';
-export { cardArtSvg } from './card-art.js';
+export { cardArtSvg } from './art/card-art.js';
 export {
   loadHumanoid,
   isHumanoidReady,
@@ -25,4 +25,4 @@ export {
   buildHumanoidUnit,
   playClip,
   crossFadeTo,
-} from './loader.js';
+} from './art/loader.js';

@@ -25,9 +25,9 @@ import { format } from 'node:util';
 
 import { loadPipelineConfig } from '../config.js';
 import { sculptWithLlm } from '../sculpt/llm_blender.js';
-import { verifyAsset } from '../verify.js';
+import { verifyAsset } from '../gate/verify.js';
 import { renderAnimationPreview } from '../sculpt/preview.js';
-import { BlenderSession } from '../blender.js';
+import { BlenderSession } from '../gate/blender.js';
 import { McpStdioClient } from '../host/weles.js';
 import { redactSecrets } from '../cli.js';
 import { importAsset, workspaceSummary } from '../host/workspace.js';

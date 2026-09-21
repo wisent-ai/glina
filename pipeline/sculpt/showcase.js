@@ -5,8 +5,8 @@
 // creates one cohesive stylized dragon with rigid parts bone-parented to a
 // compact armature, then writes visible idle/flap actions.
 
-import { BlenderSession } from '../blender.js';
-import { verifyAsset } from '../verify.js';
+import { BlenderSession } from '../gate/blender.js';
+import { verifyAsset } from '../gate/verify.js';
 
 export class ShowcaseError extends Error {}
 
