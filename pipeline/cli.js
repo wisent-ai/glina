@@ -13,17 +13,17 @@ import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadPipelineConfig } from './config.js';
-import { runTextToGameJob } from './text2game.js';
-import { McpStdioClient } from './weles.js';
+import { runTextToGameJob } from './show/text2game.js';
+import { McpStdioClient } from './host/weles.js';
 import { BlenderSession } from './blender.js';
-import { provisionBlender } from './setup.js';
+import { provisionBlender } from './host/setup.js';
 import { verifyAsset } from './verify.js';
-import { sculptWithLlm } from './llm_blender.js';
-import { renderAnimationPreview } from './preview.js';
-import { animatePreset } from './animate.js';
-import { buildShowcase } from './showcase.js';
-import { recordAssetImported, runOnboarding } from './onboarding.js';
-import { activeAssetPath, importAsset, workspaceSummary } from './workspace.js';
+import { sculptWithLlm } from './sculpt/llm_blender.js';
+import { renderAnimationPreview } from './sculpt/preview.js';
+import { animatePreset } from './sculpt/animate.js';
+import { buildShowcase } from './sculpt/showcase.js';
+import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
+import { activeAssetPath, importAsset, workspaceSummary } from './host/workspace.js';
 
 
 export function redactSecrets(node, path = []) {

@@ -12,7 +12,7 @@
 //      nonSecretEnv) — the vault is the single source of truth.
 
 import { readFile } from 'node:fs/promises';
-import { isSkarbiecRef, resolveConfigSecrets, SkarbiecError } from './skarbiec.js';
+import { isSkarbiecRef, resolveConfigSecrets, SkarbiecError } from './host/skarbiec.js';
 
 const SECRET_KEY_PATTERN = /(token|secret|password|passwd|credential|cookie|api[_-]?key|private[_-]?key)/i;
 

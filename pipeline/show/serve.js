@@ -23,14 +23,14 @@
 import { createServer } from 'node:http';
 import { format } from 'node:util';
 
-import { loadPipelineConfig } from './config.js';
-import { sculptWithLlm } from './llm_blender.js';
-import { verifyAsset } from './verify.js';
-import { renderAnimationPreview } from './preview.js';
-import { BlenderSession } from './blender.js';
-import { McpStdioClient } from './weles.js';
-import { redactSecrets } from './cli.js';
-import { importAsset, workspaceSummary } from './workspace.js';
+import { loadPipelineConfig } from '../config.js';
+import { sculptWithLlm } from '../sculpt/llm_blender.js';
+import { verifyAsset } from '../verify.js';
+import { renderAnimationPreview } from '../sculpt/preview.js';
+import { BlenderSession } from '../blender.js';
+import { McpStdioClient } from '../host/weles.js';
+import { redactSecrets } from '../cli.js';
+import { importAsset, workspaceSummary } from '../host/workspace.js';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 

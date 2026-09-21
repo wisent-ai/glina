@@ -8,11 +8,11 @@
 
 import readline from 'node:readline';
 import { loadPipelineConfig } from './config.js';
-import { runTextToGameJob } from './text2game.js';
+import { runTextToGameJob } from './show/text2game.js';
 import { verifyAsset } from './verify.js';
 import { BlenderSession } from './blender.js';
-import { McpStdioClient } from './weles.js';
-import { sculptWithLlm } from './llm_blender.js';
+import { McpStdioClient } from './host/weles.js';
+import { sculptWithLlm } from './sculpt/llm_blender.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const DEFAULT_CONFIG = new URL('../pipeline.config.json', import.meta.url).pathname;

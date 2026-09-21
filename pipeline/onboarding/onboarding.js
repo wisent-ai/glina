@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { importAsset } from './workspace.js';
+import { importAsset } from '../host/workspace.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFINITION = path.join(here, 'onboarding_first_use.json');

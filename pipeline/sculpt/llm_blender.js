@@ -8,9 +8,9 @@
 
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { BlenderSession } from './blender.js';
+import { BlenderSession } from '../blender.js';
 import { buildCompleter, parseJsonFrom, LlmError } from './llm.js';
-import { verifyAsset } from './verify.js';
+import { verifyAsset } from '../verify.js';
 
 export class SculptError extends Error {
   constructor(message, { round, cause } = {}) {

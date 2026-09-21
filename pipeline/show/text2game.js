@@ -8,9 +8,9 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { WelesBrowserSession } from './weles.js';
-import { postProcessModel } from './blender.js';
-import { verifyAsset } from './verify.js';
+import { WelesBrowserSession } from '../host/weles.js';
+import { postProcessModel } from '../blender.js';
+import { verifyAsset } from '../verify.js';
 
 export class PipelineError extends Error {
   constructor(message, { step, cause } = {}) {

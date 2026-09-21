@@ -9,7 +9,7 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
-import { BlenderSession } from './blender.js';
+import { BlenderSession } from '../blender.js';
 
 export class PreviewError extends Error {}
 
