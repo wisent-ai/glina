@@ -1,0 +1,11 @@
+# Paths this repository declares to the size audit, with the reason each one
+# is declared. Nothing here is code somebody arranged: every entry is output
+# this product wrote.
+
+# Where the pipeline puts what it makes. `glina create`, `glina showcase` and
+# the MCP tools all default to this directory, and each model arrives with the
+# preview rendered beside it, so the count grows every time somebody generates
+# something. A 3D model and its preview are captures, not modules: nothing
+# reads them as lines, and no arrangement of sub-folders would make the
+# directory mean more than "what this pipeline has produced".
+assets/models
