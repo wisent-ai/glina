@@ -67,7 +67,6 @@ commands:
   verify [file.glb] [--config path]   structural + optional render gate
   check-config [--config path]
   weles-tools
-  serve [--port n] [--config path]   loopback HTTP/JSON backend for desktop apps
   blender-health              MCP handshake + execute_blender_code probe
   setup [--check] [--dry-run] provision Blender + uv + blender-mcp
 

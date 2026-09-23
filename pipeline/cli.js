@@ -96,17 +96,6 @@ async function main() {
       console.log(JSON.stringify(redactSecrets(config), null, 2));
       return;
     }
-    case 'serve': {
-      const port = options.port === undefined ? 8080 : Number(options.port);
-      if (!Number.isInteger(port) || port < 0 || port > 65535) {
-        console.error('error: serve requires --port <n> (0 = ephemeral)');
-        process.exitCode = 2;
-        return;
-      }
-      const { startServe } = await import('./show/serve.js');
-      await startServe({ port, configPath });
-      return;
-    }
     case 'weles-tools': {
       const client = new McpStdioClient({});
       await client.start();
@@ -265,8 +254,8 @@ async function main() {
   }
 }
 
-// Run main() only when invoked directly — serve.js imports redactSecrets
-// from this module without taking over the process.
+// Run main() only when invoked directly, so a module that imports
+// redactSecrets from here does not take over the process.
 const invokedDirectly =
   process.argv[1] && fileURLToPath(import.meta.url) === resolvePath(process.argv[1]);
 if (invokedDirectly) {
