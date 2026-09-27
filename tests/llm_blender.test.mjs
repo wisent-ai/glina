@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildCompleter, parseJsonFrom, LlmError } from '../pipeline/llm.js';
+import { buildCompleter, parseJsonFrom, LlmError } from '../pipeline/sculpt/llm.js';
 test('parseJsonFrom handles fences and prose', () => {
   assert.deepEqual(parseJsonFrom('```json\n{"a": 1}\n```'), { a: 1 });
   assert.deepEqual(parseJsonFrom('sure! {"b": 2} done'), { b: 2 });
