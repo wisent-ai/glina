@@ -22,88 +22,21 @@ export class LlmError extends Error {
 /** Build the model transport from a resolved pipeline config. */
 export function buildCompleter(models = {}, { fetchImpl } = {}) {
   const fetch_ = fetchImpl ?? fetch;
-  if (models.anthropic || models.openai || models.direct) {
+  const other = Object.keys(models).filter((key) => key !== 'brama');
+  if (other.length > 0) {
     throw new LlmError(
-      'direct provider APIs are not supported in this package — model access goes ' +
-        'through Brama (models.brama) or, when the operator sanctions it in the ' +
-        'config, OpenRouter (models.openrouter)',
+      `model access goes through Brama only (models.brama); remove models.${other.join(', models.')} ` +
+        'from the pipeline config',
     );
   }
-  const bramaReady = Boolean(models.brama?.url && models.brama?.key && models.brama?.bearer);
-  const openRouterReady = Boolean(models.openrouter?.key);
-  // Brama stays the default path; an explicit models.backend flips priority
-  // when the operator says so (e.g. during a Brama provider outage).
-  const prefer = models.backend ?? 'brama';
-  if ((prefer === 'brama' && bramaReady) || (prefer === 'openrouter' && !openRouterReady)) {
-    if (!bramaReady) {
-      throw new LlmError('backend=brama requested but models.brama.url/key/bearer are not configured');
-    }
-    return bramaCompleter(models.brama, fetch_);
+  const missing = ['url', 'key', 'bearer', 'agent_id'].filter((key) => !models.brama?.[key]);
+  if (missing.length > 0) {
+    throw new LlmError(
+      `Brama is not configured: models.brama.${missing.join(', models.brama.')} missing ` +
+        '(skarbiec:// references in pipeline.config.json)',
+    );
   }
-  if (openRouterReady) {
-    return openRouterCompleter(models.openrouter, fetch_);
-  }
-  throw new LlmError(
-    'no model backend configured — set models.brama.url+key+bearer or ' +
-      'models.openrouter.key (skarbiec:// references in pipeline.config.json)',
-  );
-}
-
-/** OpenRouter speaks the OpenAI chat-completions shape with a bearer key. */
-function openRouterCompleter(cfg, fetch_) {
-  const base = (cfg.url ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
-  const attempts = cfg.attempts ?? 4;
-  return async function complete({ system, messages, maxTokens = 4096 }) {
-    let lastNote = '';
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      let response;
-      try {
-        response = await fetch_(`${base}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${cfg.key}`,
-          },
-          body: JSON.stringify({
-            model: cfg.model,
-            max_tokens: maxTokens,
-            messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
-          }),
-          signal: AbortSignal.timeout(Number(cfg.timeoutMs ?? 180_000)),
-        });
-      } catch (error) {
-        lastNote = `transport: ${error.message}`;
-        if (attempt < attempts) {
-          await new Promise((r) => setTimeout(r, attempt * 2000));
-          continue;
-        }
-        throw new LlmError(`openrouter unreachable after ${attempts} attempts: ${error.message}`);
-      }
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        // 429/5xx are provider-side capacity and rotation windows; a 4xx
-        // refusal of the key or model is final.
-        const retriable = response.status === 429 || response.status >= 500;
-        const message = `openrouter HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`;
-        if (retriable && attempt < attempts) {
-          console.error(`[openrouter] attempt ${attempt}/${attempts} failed: HTTP ${response.status}, retrying`);
-          await new Promise((r) => setTimeout(r, attempt * 2000));
-          continue;
-        }
-        throw new LlmError(message, { status: response.status });
-      }
-      const text = body.choices?.[0]?.message?.content ?? '';
-      if (!text.trim() && attempt < attempts) {
-        // Reasoning models intermittently burn the budget on hidden
-        // thinking and return no content; same class as a 502 here.
-        console.error(`[openrouter] attempt ${attempt}/${attempts} returned empty content, retrying`);
-        await new Promise((r) => setTimeout(r, attempt * 2000));
-        continue;
-      }
-      return { text, stopReason: body.choices?.[0]?.finish_reason };
-    }
-    throw new LlmError(`openrouter exhausted ${attempts} attempts: ${lastNote}`);
-  };
+  return bramaCompleter(models.brama, fetch_);
 }
 
 /** Brama router shape — HMAC-signed requests (mirrors weles' signedRouterHeaders). */
