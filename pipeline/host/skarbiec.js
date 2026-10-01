@@ -37,10 +37,10 @@ export function parseSkarbiecRef(ref) {
   return { item: match[1], field: match[2] };
 }
 
-function runSkarbiec(args, { binary, timeoutMs = 15_000 } = {}) {
+function runSkarbiec(args, { binary } = {}) {
   const bin = binary ?? process.env.SKARBIEC_BIN ?? 'skarbiec';
   return new Promise((resolve, reject) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(bin, args, { maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
         reject(
           new SkarbiecError(`skarbiec CLI failed: ${stderr?.trim() || error.message}`, {

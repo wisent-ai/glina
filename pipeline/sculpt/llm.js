@@ -51,63 +51,44 @@ function bramaCompleter(cfg, fetch_) {
     // x-agent-id + x-agent-timestamp + x-agent-signature =
     // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>").
     const { createHash, createHmac } = await import('node:crypto');
-    // The fleet path to Brama can flap (a resolver adapter re-dials its
-    // upstream per connection), so transport-level failures retry; a signed
-    // refusal (401/403) or a routing error never does.
-    const attempts = cfg.attempts ?? 4;
-    let lastError = null;
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      const ts = String(Math.floor(Date.now() / 1000));
-      const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
-      const signature = createHmac('sha256', cfg.key)
-        .update(`${cfg.agent_id}:${ts}:${bodyHash}`)
-        .digest('hex');
-      try {
-        const response = await fetch_(url, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${cfg.bearer}`,
-            'x-agent-id': cfg.agent_id,
-            'x-agent-timestamp': ts,
-            'x-agent-signature': signature,
-          },
-          body: bodyStr,
-          // A black-holed connection must never hang the sculpt loop: every
-          // attempt gets one hard deadline.
-          signal: AbortSignal.timeout(Number(cfg.timeoutMs ?? 120_000)),
-        });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const error = new LlmError(
-            `brama HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`,
-            { status: response.status },
-          );
-          if ((response.status === 502 || response.status === 503) && attempt < attempts) {
-            console.error(`[brama] attempt ${attempt}/${attempts} failed: HTTP ${response.status}, retrying`);
-            lastError = error;
-            await new Promise((r) => setTimeout(r, attempt * 3000));
-            continue;
-          }
-          throw error;
-        }
-        const text = body.choices?.[0]?.message?.content ?? '';
-        if (!text.trim() && attempt < attempts) {
-          // A 200 with no content happens intermittently on reasoning
-          // routes (the token cap burns on hidden thinking). Same class of
-          // transient as a 502 — retry instead of killing the loop.
-          await new Promise((r) => setTimeout(r, attempt * 3000));
-          continue;
-        }
-        return { text, stopReason: body.choices?.[0]?.finish_reason };
-      } catch (error) {
-        if (error instanceof LlmError) throw error;
-        lastError = error;
-        if (attempt >= attempts) break;
-        await new Promise((r) => setTimeout(r, attempt * 1500));
-      }
+    // One request. A refusal, an empty answer or a transport failure is
+    // returned as that error, naming what Brama said (cli.md rule 8).
+    const ts = String(Math.floor(Date.now() / 1000));
+    const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
+    const signature = createHmac('sha256', cfg.key)
+      .update(`${cfg.agent_id}:${ts}:${bodyHash}`)
+      .digest('hex');
+    let response;
+    try {
+      response = await fetch_(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${cfg.bearer}`,
+          'x-agent-id': cfg.agent_id,
+          'x-agent-timestamp': ts,
+          'x-agent-signature': signature,
+        },
+        body: bodyStr,
+      });
+    } catch (error) {
+      throw new LlmError(`brama unreachable at ${url}: ${error.message}`, { cause: error });
     }
-    throw new LlmError(`brama unreachable after ${attempts} attempts: ${lastError?.message ?? 'unknown'}`);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new LlmError(
+        `brama HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`,
+        { status: response.status },
+      );
+    }
+    const text = body.choices?.[0]?.message?.content ?? '';
+    if (!text.trim()) {
+      throw new LlmError(
+        `brama answered with no content (finish_reason ${body.choices?.[0]?.finish_reason ?? 'none'})`,
+        { status: response.status },
+      );
+    }
+    return { text, stopReason: body.choices?.[0]?.finish_reason };
   };
 }
 
