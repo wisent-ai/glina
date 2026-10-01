@@ -34,7 +34,8 @@ export function parseArgs(argv) {
     if (arg.startsWith('--')) {
       const key = arg.slice(2);
       const next = rest[i + 1];
-      if (next && !next.startsWith('--')) {
+      // `--text` takes no value, so it never swallows the word after it.
+      if (key !== 'text' && next && !next.startsWith('--')) {
         options[key] = next;
         i += 1;
       } else {
@@ -47,7 +48,31 @@ export function parseArgs(argv) {
   return { command, positional, options };
 }
 
-export const USAGE = `usage: node pipeline/cli.js <command> [args]
+/**
+ * One result as people or machines read it, from the same value (cli.md
+ * rule 13): pretty JSON by default, `path: value` lines with `--text`.
+ */
+export function render(value, text) {
+  if (!text) return JSON.stringify(value, null, 2);
+  const lines = [];
+  const walk = (node, path) => {
+    if (Array.isArray(node) && node.length > 0) {
+      node.forEach((item, index) => walk(item, `${path}[${index}]`));
+    } else if (node && typeof node === 'object' && Object.keys(node).length > 0) {
+      for (const [key, item] of Object.entries(node)) walk(item, path ? `${path}.${key}` : key);
+    } else if (node !== undefined) {
+      const shown = node === null || typeof node === 'object' ? '-' : String(node);
+      lines.push(path ? `${path}: ${shown}` : shown);
+    }
+  };
+  walk(value, '');
+  return lines.join('\n');
+}
+
+export const USAGE = `usage: node pipeline/cli.js <command> [args] [--text]
+
+Every command prints its result as JSON; --text prints the same result as
+one path: value line per field.
 
 commands:
   onboarding [--reset] [--asset file.glb] [--name id]

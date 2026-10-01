@@ -26,7 +26,7 @@ import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
 import { activeAssetPath, importAsset, workspaceSummary } from './host/workspace.js';
 export { redactSecrets } from "./arguments.js";
 
-import { DEFAULT_CONFIG, USAGE, parseArgs, redactSecrets } from "./arguments.js";
+import { DEFAULT_CONFIG, USAGE, parseArgs, redactSecrets, render } from "./arguments.js";
 
 async function main() {
   const words = process.argv.slice(2);
@@ -37,6 +37,7 @@ async function main() {
   }
   const { command, positional, options } = parseArgs(words);
   const configPath = options.config ?? DEFAULT_CONFIG;
+  const print = (value) => console.log(render(value, options.text === true));
 
   switch (command) {
     case 'create': {
@@ -55,7 +56,7 @@ async function main() {
         },
         config,
       );
-      console.log(JSON.stringify(result, null, 2));
+      print(result);
       return;
     }
     case 'onboarding': {
@@ -90,16 +91,16 @@ async function main() {
       } else {
         process.exitCode = 1;
       }
-      console.log(JSON.stringify(report, null, 2));
+      print(report);
       return;
     }
     case 'workspace': {
-      console.log(JSON.stringify(await workspaceSummary(), null, 2));
+      print(await workspaceSummary());
       return;
     }
     case 'check-config': {
       const config = await loadPipelineConfig(configPath);
-      console.log(JSON.stringify(redactSecrets(config), null, 2));
+      print(redactSecrets(config));
       return;
     }
     case 'weles-tools': {
@@ -114,7 +115,7 @@ async function main() {
       const session = await BlenderSession.start({});
       const healthy = await session.isHealthy();
       const tools = await session.listTools().catch(() => []);
-      console.log(JSON.stringify({ healthy, tools: tools.map((t) => t.name) }, null, 2));
+      print({ healthy, tools: tools.map((t) => t.name) });
       await session.close();
       process.exitCode = healthy ? 0 : 1;
       return;
@@ -124,7 +125,7 @@ async function main() {
         checkOnly: Boolean(options.check),
         dryRun: Boolean(options['dry-run']),
       });
-      console.log(JSON.stringify(report, null, 2));
+      print(report);
       if (!report.healthy) process.exitCode = 1;
       return;
     }
@@ -144,7 +145,7 @@ async function main() {
       const { writeFile, chmod } = await import('node:fs/promises');
       await writeFile(out, JSON.stringify({ _resolved: true, ...config }, null, 2));
       await chmod(out, 0o600);
-      console.log(JSON.stringify({ out, resolved: true }));
+      print({ out, resolved: true });
       return;
     }
     case 'verify': {
@@ -161,7 +162,7 @@ async function main() {
         // config is optional for verify — defaults kick in without it
       }
       const report = await verifyAsset(file, config);
-      console.log(JSON.stringify(report, null, 2));
+      print(report);
       if (!report.ok) process.exitCode = 1;
       return;
     }
@@ -183,7 +184,7 @@ async function main() {
         config,
         { onRound: (r) => console.error(`[round ${r.round}] ${r.step.thought ?? ''}`) },
       );
-      console.log(JSON.stringify({ ...result, transcript: undefined, rounds: result.rounds }, null, 2));
+      print({ ...result, transcript: undefined, rounds: result.rounds });
       return;
     }
     case 'showcase': {
@@ -200,7 +201,7 @@ async function main() {
         outputPath: output,
         sessionOptions: config.blender?.mcp,
       });
-      console.log(JSON.stringify(result, null, 2));
+      print(result);
       return;
     }
     case 'animate': {
@@ -223,7 +224,7 @@ async function main() {
         preset: options.preset ?? 'dragon',
         sessionOptions: config.blender?.mcp,
       });
-      console.log(JSON.stringify(result, null, 2));
+      print(result);
       return;
     }
     case 'preview-anim': {
@@ -247,7 +248,7 @@ async function main() {
         fps: options.fps ? Number(options.fps) : undefined,
         sessionOptions: config.blender?.mcp,
       });
-      console.log(JSON.stringify(result, null, 2));
+      print(result);
       return;
     }
     case 'help':
