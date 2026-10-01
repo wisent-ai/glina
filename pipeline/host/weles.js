@@ -24,8 +24,6 @@ export class WelesError extends Error {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 120_000;
-
 /** Low-level JSON-RPC client over a spawned MCP stdio server. */
 export class McpStdioClient {
   constructor({ command = 'weles-mcp', args = [], env } = {}) {
@@ -76,7 +74,6 @@ export class McpStdioClient {
     const entry = this.pending.get(id);
     if (!entry) return;
     this.pending.delete(id);
-    clearTimeout(entry.timer);
     if (error) {
       entry.reject(new WelesError(error.message ?? 'weles MCP error', { code: error.code }));
     } else {
@@ -96,19 +93,16 @@ export class McpStdioClient {
     if (!this.process) return Promise.reject(new WelesError('MCP client not started'));
     const id = this.nextId;
     this.nextId += 1;
+    // No deadline: a request settles with the server's answer, or with the
+    // process `error`/`exit` that `_failAll` turns into a named WelesError.
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new WelesError(`weles MCP request timed out: ${method}`));
-      }, REQUEST_TIMEOUT_MS);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject });
       this._send({ jsonrpc: '2.0', id, method, params });
     });
   }
 
   _failAll(error) {
     for (const [, entry] of this.pending) {
-      clearTimeout(entry.timer);
       entry.reject(error);
     }
     this.pending.clear();
