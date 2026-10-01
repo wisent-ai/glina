@@ -18,9 +18,7 @@
       "generateSubmit": "button.generate"
     },
     "artifact": {
-      "pollExpression": "document.querySelector('a.download-glb')?.href ?? null",
-      "timeoutMs": 300000,
-      "intervalMs": 5000
+      "expression": "document.querySelector('a.download-glb')?.href ?? null"
     }
   },
   "models": {

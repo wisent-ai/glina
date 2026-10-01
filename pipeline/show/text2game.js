@@ -66,20 +66,25 @@ export async function runTextToGameJob(job, config, deps = {}) {
     await step('studio:prompt', () => page.fill(studio.selectors.promptInput, job.prompt));
     await step('studio:submit', () => page.click(studio.selectors.generateSubmit));
 
-    // ---- wait for the artifact ----
-    const artifactUrl = await step('studio:wait-artifact', async () => {
-      const expression = studio.artifact.pollExpression;
-      const timeoutMs = studio.artifact.timeoutMs ?? 300_000;
-      const intervalMs = studio.artifact.intervalMs ?? 5_000;
-      const deadline = Date.now() + timeoutMs;
-      for (;;) {
-        const value = await page.evaluate(expression);
-        if (typeof value === 'string' && value.startsWith('http')) return value;
-        if (Date.now() > deadline) {
-          throw new PipelineError(`artifact not ready within ${timeoutMs}ms`);
-        }
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    // ---- the artifact appears ----
+    // One evaluation that resolves inside the page when the artifact link is
+    // present: a MutationObserver re-reads `artifactExpression` on every DOM
+    // change, so nothing here pauses, re-asks or gives up after a fixed time
+    // (cli.md rule 8). A studio that never produces the link leaves the run
+    // open until the operator stops it; a closed page is Weles's own error.
+    const artifactUrl = await step('studio:artifact', async () => {
+      const read = studio.artifact.expression;
+      const value = await page.evaluate(`new Promise((resolve) => {
+        const read = () => { const value = (${read}); return typeof value === 'string' && value.startsWith('http') ? value : null; };
+        const found = read();
+        if (found) return resolve(found);
+        const observer = new MutationObserver(() => { const value = read(); if (value) { observer.disconnect(); resolve(value); } });
+        observer.observe(document, { subtree: true, childList: true, attributes: true });
+      })`);
+      if (typeof value !== 'string' || !value.startsWith('http')) {
+        throw new PipelineError(`studio.artifact.expression resolved to ${JSON.stringify(value)}, not an http URL`);
       }
+      return value;
     });
 
     // ---- download ----
