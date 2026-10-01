@@ -9,7 +9,7 @@
 // Credentials: resolved ONLY from Skarbiec (skarbiec:// refs in the config).
 // Browser:     driven ONLY through the Weles MCP server.
 
-import { resolve as resolvePath } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { loadPipelineConfig } from './config.js';
@@ -29,7 +29,13 @@ export { redactSecrets } from "./arguments.js";
 import { DEFAULT_CONFIG, USAGE, parseArgs, redactSecrets } from "./arguments.js";
 
 async function main() {
-  const { command, positional, options } = parseArgs(process.argv.slice(2));
+  const words = process.argv.slice(2);
+  // `--help` or `-h` anywhere prints the usage and runs nothing.
+  if (words.some((word) => word === '--help' || word === '-h')) {
+    console.log(USAGE);
+    return;
+  }
+  const { command, positional, options } = parseArgs(words);
   const configPath = options.config ?? DEFAULT_CONFIG;
 
   switch (command) {
@@ -255,9 +261,18 @@ async function main() {
 }
 
 // Run main() only when invoked directly, so a module that imports
-// redactSecrets from here does not take over the process.
-const invokedDirectly =
-  process.argv[1] && fileURLToPath(import.meta.url) === resolvePath(process.argv[1]);
+// redactSecrets from here does not take over the process. The installed
+// `glina` is a symlink to this file, so both sides are compared after
+// resolving links: comparing the link's own path made every installed
+// command print nothing and exit 0.
+const invokedDirectly = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
 if (invokedDirectly) {
   main().catch((error) => {
     console.error(`error: ${error.message}`);
