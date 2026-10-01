@@ -2,3 +2,4 @@ node_modules/
 pipeline.config.json
 *.log
 .DS_Store
+build/
