@@ -57,13 +57,11 @@ glina animate [assets/models/dragon.glb] --preset dragon --out dragon-animated.g
 glina showcase dragon --out assets/models/smok.glb   # cohesive animated reference
 glina showcases [list | add <name> <file.json> | remove <name>]
 glina presets [list | add <name> <file.json> | remove <name>]
-glina blender-health                                 # probe the Blender session
-glina weles-tools                                    # list browser-layer tools
+glina doctor                                         # config, Blender bridge, browser layer; exit 1 on any failure
 ```
 
 MCP tools for agent hosts (`glina-mcp`): `glina_create_asset`,
-`glina_sculpt`, `glina_verify_asset`, `glina_check_config`,
-`glina_blender_health`, `glina_weles_tools`.
+`glina_sculpt`, `glina_verify_asset`, `glina_check_config`, `glina_doctor`.
 
 `glina import` accepts existing GLB data without invoking a model. It stages the
 exact bytes, runs `pipeline/verify.js` (including configured Blender smoke),

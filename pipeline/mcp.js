@@ -2,7 +2,7 @@
 // mcp.js — MCP stdio server for game_asset_creator.
 //
 // Exposes the whole pipeline to MCP clients (agents): asset creation,
-// verification, config check, Weles/Blender health probes. Same wire
+// verification, config check, the doctor. Same wire
 // discipline as the rest of the pipeline — stdout carries JSON-RPC
 // frames only, diagnostics go to stderr.
 
@@ -10,8 +10,7 @@ import readline from 'node:readline';
 import { checkPipelineConfig, loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './show/text2game.js';
 import { verifyAsset } from './gate/verify.js';
-import { BlenderSession } from './gate/blender.js';
-import { McpStdioClient } from './host/weles.js';
+import { runDoctor } from './host/doctor.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
@@ -73,14 +72,13 @@ const TOOLS = [
     },
   },
   {
-    name: 'glina_blender_health',
-    description: 'Probe the Blender MCP server (handshake + execute_blender_code availability).',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'glina_weles_tools',
-    description: 'List the tools exposed by the Weles MCP server (browser layer).',
-    inputSchema: { type: 'object', properties: {} },
+    name: 'glina_doctor',
+    description:
+      'Check every dependency: the config and its vault references, the Blender MCP bridge (handshake + execute_blender_code probe) and the browser layer (Weles MCP tools). Returns {healthy, checks[]} with the failed step named per check.',
+    inputSchema: {
+      type: 'object',
+      properties: { config: { type: 'string', description: 'Path to pipeline.config.json' } },
+    },
   },
 ];
 
@@ -143,19 +141,8 @@ async function callTool(name, args = {}) {
     case 'glina_check_config': {
       return textResult(await checkPipelineConfig(configPath));
     }
-    case 'glina_blender_health': {
-      const session = await BlenderSession.start({});
-      const healthy = await session.isHealthy();
-      const tools = await session.listTools().catch(() => []);
-      await session.close();
-      return textResult({ healthy, tools: tools.map((t) => t.name) });
-    }
-    case 'glina_weles_tools': {
-      const client = new McpStdioClient({});
-      await client.start();
-      const tools = await client.listTools();
-      await client.close();
-      return textResult(tools.map((t) => ({ name: t.name, description: t.description })));
+    case 'glina_doctor': {
+      return textResult(await runDoctor({ configPath }));
     }
     default:
       return errorResult(`unknown tool: ${name}`);

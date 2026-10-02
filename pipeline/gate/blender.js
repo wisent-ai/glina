@@ -65,19 +65,32 @@ export class BlenderSession {
   }
 
   /**
-   * True when the server answers, exposes execute_blender_code, AND a
-   * trivial execution round-trips into Blender. The MCP server starts
-   * fine even when the Blender side of the bridge is dead, so tool
-   * listing alone lies about health.
+   * The bridge's health, as what actually happened: the server answers,
+   * exposes execute_blender_code, AND a trivial print round-trips through
+   * Blender and comes back. The MCP server starts fine even when the
+   * Blender side of the bridge is dead and then answers the probe with
+   * its own "could not connect" text instead of the printed line, so
+   * neither the tool list nor a non-throwing call proves anything: only
+   * the echoed marker does. A failed probe carries the step that broke.
+   * @returns {Promise<{healthy: boolean, error?: string}>}
    */
-  async isHealthy() {
+  async health() {
+    const marker = 'health-probe';
     try {
       const tools = await this.listTools();
-      if (!tools.some((t) => t.name === 'execute_blender_code')) return false;
-      await this.execute('print("health-probe")');
-      return true;
-    } catch {
-      return false;
+      if (!tools.some((t) => t.name === 'execute_blender_code')) {
+        return { healthy: false, error: 'the bridge does not expose execute_blender_code' };
+      }
+      const output = String(await this.execute(`print("${marker}")`));
+      if (!output.includes(marker)) {
+        return {
+          healthy: false,
+          error: `execute_blender_code did not reach Blender: ${output.trim() || 'empty answer'}`,
+        };
+      }
+      return { healthy: true };
+    } catch (error) {
+      return { healthy: false, error: error.message };
     }
   }
 

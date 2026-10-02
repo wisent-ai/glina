@@ -4,7 +4,7 @@
 // Commands:
 //   create <prompt> [--race <race>] [--out <dir>] [--config <path>]
 //   check-config [--config <path>]     validate + resolve the config (no browser)
-//   weles-tools                        list the tools the Weles MCP server exposes
+//   doctor [--config <path>]           check the config, the Blender bridge and the browser layer
 //
 // Credentials: skarbiec:// refs in the config, answered by Skarbiec or by the
 //              owner-only GLINA_CREDENTIALS_FILE on a machine without it.
@@ -15,8 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 import { checkPipelineConfig, loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './show/text2game.js';
-import { McpStdioClient } from './host/weles.js';
-import { BlenderSession } from './gate/blender.js';
+import { runDoctor } from './host/doctor.js';
 import { provisionBlender } from './host/setup.js';
 import { verifyAsset } from './gate/verify.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
@@ -103,21 +102,10 @@ async function main() {
       print(await checkPipelineConfig(configPath));
       return;
     }
-    case 'weles-tools': {
-      const client = new McpStdioClient({});
-      await client.start();
-      const tools = await client.listTools();
-      for (const tool of tools) console.log(`${tool.name} — ${tool.description ?? ''}`);
-      await client.close();
-      return;
-    }
-    case 'blender-health': {
-      const session = await BlenderSession.start({});
-      const healthy = await session.isHealthy();
-      const tools = await session.listTools().catch(() => []);
-      print({ healthy, tools: tools.map((t) => t.name) });
-      await session.close();
-      process.exitCode = healthy ? 0 : 1;
+    case 'doctor': {
+      const report = await runDoctor({ configPath });
+      print(report);
+      if (!report.healthy) process.exitCode = 1;
       return;
     }
     case 'setup': {

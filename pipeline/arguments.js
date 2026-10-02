@@ -76,8 +76,10 @@ commands:
                                   (assets/showcases, assets/presets)
   verify [file.glb] [--config path]   structural + optional render gate
   check-config [--config path]
-  weles-tools
-  blender-health              MCP handshake + execute_blender_code probe
+  doctor [--config path]      check the config and vault references, the
+                                  Blender MCP bridge (handshake + code probe)
+                                  and the browser layer (Weles MCP tools);
+                                  exits 1 when any check fails
   setup [--check] [--dry-run] provision Blender + uv + blender-mcp
 
 credentials come from skarbiec:// references in the config, answered by
