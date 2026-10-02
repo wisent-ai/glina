@@ -164,7 +164,7 @@ jobs:
           HERE = Path(__file__).resolve().parent
           DEFAULT_ROOT = HERE.parent
           
-          CLI_REL = "pipeline/cli.js"
+          CLI_REL = "pipeline/arguments.js"
           MCP_REL = "pipeline/mcp.js"
           
           # This workspace admits no bare numeric literals, so the small numbers below
@@ -314,29 +314,22 @@ jobs:
           
           
           def cli_commands(masked: str, literals: list[tuple[int, str]]) -> set[str]:
-              """The subcommands the CLI's own USAGE block advertises."""
-              start = _locate(masked, "USAGE", CLI_REL)
-              usage = ""
+              """The subcommands the CLI advertises: the `name` of every row of
+              the COMMANDS table its usage and per-command help are rendered from."""
+              span = balanced_span(masked, _locate(masked, "COMMANDS", CLI_REL), "[", CLI_REL)
+              found = set()
               for offset, value in literals:
-                  if offset > start:
-                      usage = value
-                      break
-              if "commands:" not in usage:
+                  if not (span[EXIT_OK] <= offset < span[-len("x")]):
+                      continue
+                  before = masked[:offset].rstrip()
+                  if before.endswith("name:") and _CLI_COMMAND.match("  " + value):
+                      found.add(value)
+              if not found:
                   raise ScanError(
-                      f"{CLI_REL}: the USAGE literal has no 'commands:' section; this extractor "
+                      f"{CLI_REL}: the COMMANDS table has no `name:` rows; this extractor "
                       "no longer reads the advertised commands. Fix it rather than publishing a "
                       "shrunken surface."
                   )
-              found: set[str] = set()
-              listing = usage.split("commands:", maxsplit=len("x"))[-len("x")]
-              for line in listing.splitlines():
-                  if not line.strip():
-                      if found:
-                          break
-                      continue
-                  match = _CLI_COMMAND.match(line)
-                  if match:
-                      found.add(match.group(FIRST_GROUP))
               return found
           
           

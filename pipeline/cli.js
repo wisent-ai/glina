@@ -26,13 +26,14 @@ import { DeclarationError, availability } from './rigs/declared.js';
 import { declarationCommand } from './rigs/commands.js';
 import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
 import { activeAssetPath, importAsset, workspaceSummary } from './host/workspace.js';
-import { DEFAULT_CONFIG, USAGE, parseArgs, render } from "./arguments.js";
+import { DEFAULT_CONFIG, USAGE, commandHelp, parseArgs, render } from "./arguments.js";
 
 async function main() {
   const words = process.argv.slice(2);
-  // `--help` or `-h` anywhere prints the usage and runs nothing.
+  // `--help` or `-h` anywhere prints help and runs nothing: the whole usage
+  // at the top level, one command's row after that command.
   if (words.some((word) => word === '--help' || word === '-h')) {
-    console.log(USAGE);
+    console.log(commandHelp(words[0]));
     return;
   }
   const { command, positional, options } = parseArgs(words);

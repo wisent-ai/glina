@@ -50,41 +50,56 @@ export function render(value, text) {
   return lines.join('\n');
 }
 
-export const USAGE = `usage: node pipeline/cli.js <command> [args] [--text]
+// One table, two readers: the top-level usage is every row in this order,
+// and `glina <command> --help` is that command's row (cli.md rule 11).
+export const COMMANDS = [
+  { name: 'onboarding', usage: 'onboarding [--reset] [--asset file.glb] [--name id]', help: 'first-run import or walkthrough replay' },
+  { name: 'import', usage: 'import <file.glb> [--name id] [--config path]', help: 'validate, persist, and activate an existing asset' },
+  { name: 'workspace', usage: 'workspace', help: 'list imported assets and the active input' },
+  { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the Weles browser layer' },
+  { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'LLM (Opus) iteratively builds the model in Blender' },
+  { name: 'preview-anim', usage: 'preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif]', help: 'render an animated GIF of one clip through Blender' },
+  { name: 'animate', usage: 'animate [file.glb] --preset <name> [--out animated.glb]', help: "apply a declared preset's visibly moving actions" },
+  { name: 'showcase', usage: 'showcase <asset> [--out <asset>-showcase.glb]', help: 'build a declared animated reference asset' },
+  { name: 'showcases', usage: 'showcases [list | add <name> <file.json> | remove <name>]', help: 'the declarations showcase reads (assets/showcases)' },
+  { name: 'presets', usage: 'presets [list | add <name> <file.json> | remove <name>]', help: 'the declarations animate reads (assets/presets)' },
+  { name: 'verify', usage: 'verify [file.glb] [--config path]', help: 'structural + optional render gate' },
+  { name: 'check-config', usage: 'check-config [--config path]', help: 'validate the config and resolve its vault references' },
+  { name: 'export-config', usage: 'export-config --out <path> [--config path]', help: 'write a resolved, owner-only config for a remote run' },
+  { name: 'doctor', usage: 'doctor [--config path]', help: 'check the config and vault references, the Blender MCP bridge (handshake + code probe) and the browser layer (Weles MCP tools); exits 1 when any check fails' },
+  { name: 'setup', usage: 'setup [--check] [--dry-run]', help: 'provision Blender + uv + blender-mcp' },
+];
 
-Every command prints its result as JSON; --text prints the same result as
-one path: value line per field.
+const WIDTH = 34;
 
-commands:
-  onboarding [--reset] [--asset file.glb] [--name id]
-                                  first-run import or walkthrough replay
-  import <file.glb> [--name id] [--config path]
-                                  validate, persist, and activate an existing asset
-  workspace                       list imported assets and the active input
-  create <prompt> [--race r] [--out dir] [--config path]
-  sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]
-                                  LLM (Opus) iteratively builds the model in Blender
-  preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif]
-                                  render an animated GIF of one clip through Blender
-  animate [file.glb] --preset <name> [--out animated.glb]
-                                  apply a declared preset's visibly moving actions
-  showcase <asset> [--out <asset>-showcase.glb]
-                                  build a declared animated reference asset
-  showcases [list | add <name> <file.json> | remove <name>]
-  presets [list | add <name> <file.json> | remove <name>]
-                                  the declarations showcase and animate read
-                                  (assets/showcases, assets/presets)
-  verify [file.glb] [--config path]   structural + optional render gate
-  check-config [--config path]
-  doctor [--config path]      check the config and vault references, the
-                                  Blender MCP bridge (handshake + code probe)
-                                  and the browser layer (Weles MCP tools);
-                                  exits 1 when any check fails
-  setup [--check] [--dry-run] provision Blender + uv + blender-mcp
+function rows(commands) {
+  return commands.map((command) =>
+    command.usage.length < WIDTH - 2
+      ? `  ${command.usage.padEnd(WIDTH)}${command.help}`
+      : `  ${command.usage}\n${''.padEnd(WIDTH + 2)}${command.help}`,
+  );
+}
 
-credentials come from skarbiec:// references in the config, answered by
+const BOUNDARIES = `credentials come from skarbiec:// references in the config, answered by
 Skarbiec or, without it, by the owner-only file GLINA_CREDENTIALS_FILE names;
 models come from models.brama or, without Brama, models.openai_compatible;
 browser automation goes only through the Weles MCP server;
 Blender work goes only through the Blender MCP server.`;
+
+export const USAGE = `usage: node pipeline/cli.js <command> [args] [--text]
+
+Every command prints its result as JSON; --text prints the same result as
+one path: value line per field. glina <command> --help prints one command.
+
+commands:
+${rows(COMMANDS).join('\n')}
+
+${BOUNDARIES}`;
+
+/** The help for one command, or the whole usage when the word is not a command. */
+export function commandHelp(name) {
+  const own = COMMANDS.filter((command) => command.name === name);
+  if (own.length === 0) return USAGE;
+  return `usage: node pipeline/cli.js ${own[0].usage} [--text]\n\n${rows(own).join('\n')}\n\n${BOUNDARIES}`;
+}
 
