@@ -42,11 +42,14 @@ function runSkarbiec(args, { binary } = {}) {
   return new Promise((resolve, reject) => {
     execFile(bin, args, { maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) {
-        reject(
-          new SkarbiecError(`skarbiec CLI failed: ${stderr?.trim() || error.message}`, {
-            cause: error,
-          }),
-        );
+        // A Skarbiec that cannot be started is answered with the way to run
+        // without it; a running Skarbiec's own refusal is passed on as said.
+        const missing = error.code === 'ENOENT';
+        const detail = missing
+          ? `${bin} cannot be started (${error.message}); without Skarbiec set GLINA_CREDENTIALS_FILE ` +
+            'to an owner-only JSON file of item -> field -> value'
+          : stderr?.trim() || error.message;
+        reject(new SkarbiecError(`skarbiec CLI failed: ${detail}`, { cause: error }));
         return;
       }
       resolve(stdout);
@@ -63,6 +66,10 @@ function runSkarbiec(args, { binary } = {}) {
  */
 export async function resolveSkarbiecRef(ref, options = {}) {
   const { item, field } = parseSkarbiecRef(ref);
+  const credentialsFile = options.credentialsFile ?? nonSecretEnv('GLINA_CREDENTIALS_FILE');
+  if (credentialsFile) {
+    return fieldOf(await localItems(credentialsFile), item, field, credentialsFile);
+  }
   let parsed;
   try {
     const stdout = await runSkarbiec(['get', item], options);
@@ -79,15 +86,48 @@ export async function resolveSkarbiecRef(ref, options = {}) {
       cause: error,
     });
   }
-  const fields = parsed?.fields ?? parsed;
-  const value = fields?.[field];
+  return fieldOf({ [item]: parsed?.fields ?? parsed }, item, field, 'skarbiec');
+}
+
+function fieldOf(items, item, field, source) {
+  const value = items?.[item]?.[field];
   if (typeof value !== 'string' || value.length === 0) {
-    throw new SkarbiecError(`skarbiec item '${item}' has no non-empty field '${field}'`, {
+    throw new SkarbiecError(`${source}: item '${item}' has no non-empty field '${field}'`, {
       item,
       field,
     });
   }
   return value;
+}
+
+/**
+ * The alternative to Skarbiec for a user without it: GLINA_CREDENTIALS_FILE
+ * names an owner-only JSON file of item -> field -> value, read in place of
+ * `skarbiec get`. A file other users can read is refused, as Skarbiec's own
+ * vault file would be.
+ */
+async function localItems(path) {
+  const { readFile, stat } = await import('node:fs/promises');
+  let mode;
+  try {
+    mode = (await stat(path)).mode;
+  } catch (error) {
+    throw new SkarbiecError(`GLINA_CREDENTIALS_FILE ${path} cannot be read: ${error.message}`, {
+      cause: error,
+    });
+  }
+  if ((mode & 0o077) !== 0) {
+    throw new SkarbiecError(
+      `GLINA_CREDENTIALS_FILE ${path} must be readable by its owner only (mode ${(mode & 0o777).toString(8)})`,
+    );
+  }
+  try {
+    return JSON.parse(await readFile(path, 'utf8'));
+  } catch (error) {
+    throw new SkarbiecError(`GLINA_CREDENTIALS_FILE ${path} is not a JSON object of item -> field -> value`, {
+      cause: error,
+    });
+  }
 }
 
 /**
@@ -124,7 +164,13 @@ export async function resolveConfigSecrets(node, options = {}, path = []) {
 }
 
 /** Names the pipeline is allowed to pull from process.env (non-secret only). */
-const ENV_ALLOWLIST = new Set(['SKARBIEC_BIN', 'WELES_BIN', 'WELES_MCP_ARGS', 'NODE_ENV']);
+const ENV_ALLOWLIST = new Set([
+  'SKARBIEC_BIN',
+  'GLINA_CREDENTIALS_FILE',
+  'WELES_BIN',
+  'WELES_MCP_ARGS',
+  'NODE_ENV',
+]);
 
 /**
  * Guard used by the config loader: returns the env var only when it is a

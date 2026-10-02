@@ -6,13 +6,14 @@
 //   check-config [--config <path>]     validate + resolve the config (no browser)
 //   weles-tools                        list the tools the Weles MCP server exposes
 //
-// Credentials: resolved ONLY from Skarbiec (skarbiec:// refs in the config).
+// Credentials: skarbiec:// refs in the config, answered by Skarbiec or by the
+//              owner-only GLINA_CREDENTIALS_FILE on a machine without it.
 // Browser:     driven ONLY through the Weles MCP server.
 
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { loadPipelineConfig } from './config.js';
+import { checkPipelineConfig, loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './show/text2game.js';
 import { McpStdioClient } from './host/weles.js';
 import { BlenderSession } from './gate/blender.js';
@@ -26,9 +27,7 @@ import { DeclarationError, availability } from './rigs/declared.js';
 import { declarationCommand } from './rigs/commands.js';
 import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
 import { activeAssetPath, importAsset, workspaceSummary } from './host/workspace.js';
-export { redactSecrets } from "./arguments.js";
-
-import { DEFAULT_CONFIG, USAGE, parseArgs, redactSecrets, render } from "./arguments.js";
+import { DEFAULT_CONFIG, USAGE, parseArgs, render } from "./arguments.js";
 
 async function main() {
   const words = process.argv.slice(2);
@@ -101,8 +100,7 @@ async function main() {
       return;
     }
     case 'check-config': {
-      const config = await loadPipelineConfig(configPath);
-      print(redactSecrets(config));
+      print(await checkPipelineConfig(configPath));
       return;
     }
     case 'weles-tools': {
@@ -278,8 +276,8 @@ async function main() {
   }
 }
 
-// Run main() only when invoked directly, so a module that imports
-// redactSecrets from here does not take over the process. The installed
+// Run main() only when invoked directly, so importing this file does not
+// take over the process. The installed
 // `glina` is a symlink to this file, so both sides are compared after
 // resolving links: comparing the link's own path made every installed
 // command print nothing and exit 0.

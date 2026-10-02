@@ -1,27 +1,8 @@
-// What the command line accepts, what it prints when it does not
-// recognise a verb, and the redaction every printed configuration goes
-// through.
+// What the command line accepts and what it prints when it does not
+// recognise a verb.
 //
 // Split out of `cli.js`, which had grown past the three-hundred-line
 // limit; running a command stays there.
-
-
-export function redactSecrets(node, path = []) {
-  if (Array.isArray(node)) return node.map((v, i) => redactSecrets(v, [...path, i]));
-  if (node && typeof node === 'object') {
-    const out = {};
-    for (const [key, value] of Object.entries(node)) {
-      const inSecretSubtree = path.length > 0 && ['credentials', 'models'].includes(path[0]);
-      if (inSecretSubtree && /(key|secret|token|password)/i.test(key) && typeof value === 'string') {
-        out[key] = '<resolved: ok>';
-      } else {
-        out[key] = redactSecrets(value, [...path, key]);
-      }
-    }
-    return out;
-  }
-  return node;
-}
 
 export const DEFAULT_CONFIG = new URL('../pipeline.config.json', import.meta.url).pathname;
 
@@ -99,7 +80,9 @@ commands:
   blender-health              MCP handshake + execute_blender_code probe
   setup [--check] [--dry-run] provision Blender + uv + blender-mcp
 
-credentials come only from skarbiec:// references in the config;
+credentials come from skarbiec:// references in the config, answered by
+Skarbiec or, without it, by the owner-only file GLINA_CREDENTIALS_FILE names;
+models come from models.brama or, without Brama, models.openai_compatible;
 browser automation goes only through the Weles MCP server;
 Blender work goes only through the Blender MCP server.`;
 

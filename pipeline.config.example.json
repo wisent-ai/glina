@@ -27,7 +27,7 @@
       "key": "skarbiec://agent:wisent-app/value",
       "bearer": "skarbiec://agent:wisent-app/bearer",
       "model": "any",
-      "_comment": "Brama (org model router) is the only model path.",
+      "_comment": "Brama (org model router). Without Brama replace models.brama with models.openai_compatible: url, bearer and model of any OpenAI-compatible provider.",
       "agent_id": "skarbiec://WISENT_APP_AGENT_ID/value"
     }
   },

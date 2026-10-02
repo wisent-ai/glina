@@ -17,16 +17,22 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
 
 ## Hard rules (never bypass)
 
-1. **Secrets**: only via [Skarbiec](https://github.com/wisent-ai/skarbiec).
-   Config holds `skarbiec://<item>/<field>` refs; the loader rejects inline
-   secrets and credential-shaped env vars.
+1. **Secrets**: [Skarbiec](https://github.com/wisent-ai/skarbiec), or on a
+   machine without it the owner-only JSON file `GLINA_CREDENTIALS_FILE` names
+   (item → field → value, mode 600; a file others can read is refused). Config
+   holds `skarbiec://<item>/<field>` refs either way; the loader rejects inline
+   secrets and credential-shaped env vars. `glina check-config` prints every
+   value that came from a reference as `<resolved: ok>`.
 2. **Browser**: only via the Weles MCP stdio server (`weles-mcp`), never a
    local Chromium/profile.
 3. **Blender**: only via a Blender MCP server (`uvx blender-mcp` default),
    never hand-rolled sockets.
-4. **Model access**: only [Brama](https://github.com/wisent-ai/brama), the org
-   model router. The loader refuses any other key under `models` by name;
-   Brama's `url`, `key`, `bearer` and `agent_id` come from Skarbiec references.
+4. **Model access**: one backend under `models`. `models.brama` is
+   [Brama](https://github.com/wisent-ai/brama), the org model router, with
+   `url`, `key`, `bearer` and `agent_id`; requests are signed. Without Brama,
+   `models.openai_compatible` names any OpenAI-compatible provider with `url`,
+   `bearer` and `model`; requests go unsigned. Any other key, or both at
+   once, is refused by name.
 
 ## Install
 

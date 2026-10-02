@@ -59,6 +59,32 @@ function assertNoInlineSecrets(node, path = []) {
  * through verbatim.
  */
 export async function loadPipelineConfig(path, { skarbiecOptions } = {}) {
+  return resolveConfigSecrets(await readPipelineConfig(path), skarbiecOptions ?? {});
+}
+
+/**
+ * Resolve every reference in a pipeline config and answer the config as it
+ * may be printed: each value that came from a reference reads
+ * `<resolved: ok>`, every other value is shown as written. What is hidden is
+ * decided by where the value came from, not by what its key is called, so a
+ * bearer or an account e-mail resolved from the vault is never printed.
+ */
+export async function checkPipelineConfig(path, { skarbiecOptions } = {}) {
+  const config = await readPipelineConfig(path);
+  await resolveConfigSecrets(config, skarbiecOptions ?? {});
+  return hideReferences(config);
+}
+
+function hideReferences(node) {
+  if (isSkarbiecRef(node)) return '<resolved: ok>';
+  if (Array.isArray(node)) return node.map(hideReferences);
+  if (node && typeof node === 'object') {
+    return Object.fromEntries(Object.entries(node).map(([key, value]) => [key, hideReferences(value)]));
+  }
+  return node;
+}
+
+async function readPipelineConfig(path) {
   const raw = await readFile(path, 'utf8');
   let config;
   try {
@@ -67,5 +93,5 @@ export async function loadPipelineConfig(path, { skarbiecOptions } = {}) {
     throw new SkarbiecError(`pipeline config is not valid JSON: ${path}`, { cause: error });
   }
   assertNoInlineSecrets(config);
-  return resolveConfigSecrets(config, skarbiecOptions ?? {});
+  return config;
 }

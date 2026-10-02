@@ -1,14 +1,19 @@
 // llm.js — model access for the pipeline's LLM loop.
 //
-// ONE backend, no exceptions: Brama, the org model router
-// (OpenAI-compatible /v1/chat/completions). Credentials come from the
-// pipeline config via skarbiec:// refs like everything else — never
-// from env. There is intentionally NO direct provider API code in this
-// package (no Anthropic/OpenAI/etc. endpoints): the user has explicitly
-// rejected direct provider calls for this pipeline.
+// Two backends, both OpenAI-compatible /v1/chat/completions:
+//   models.brama              Brama, the org model router; requests are
+//                             HMAC-signed with the agent identity.
+//   models.openai_compatible  any provider the user runs or rents, for a
+//                             user without Brama: url, bearer and model,
+//                             sent unsigned.
+// Credentials come from the pipeline config like everything else (skarbiec://
+// references, or the owner-only credentials file that answers them without
+// Skarbiec) — never from env. Exactly one backend is declared.
 //
 // The transport is one function: complete({ system, messages, maxTokens })
 // → text. Injected as a seam in tests.
+
+import { createHash, createHmac } from 'node:crypto';
 
 export class LlmError extends Error {
   constructor(message, { status, cause } = {}) {
@@ -22,25 +27,55 @@ export class LlmError extends Error {
 /** Build the model transport from a resolved pipeline config. */
 export function buildCompleter(models = {}, { fetchImpl } = {}) {
   const fetch_ = fetchImpl ?? fetch;
-  const other = Object.keys(models).filter((key) => key !== 'brama');
-  if (other.length > 0) {
+  const declared = Object.keys(models);
+  const unknown = declared.filter((key) => key !== 'brama' && key !== 'openai_compatible');
+  if (unknown.length > 0) {
     throw new LlmError(
-      `model access goes through Brama only (models.brama); remove models.${other.join(', models.')} ` +
-        'from the pipeline config',
+      `models.${unknown.join(', models.')} is not a model backend: declare models.brama, ` +
+        'or models.openai_compatible for a provider without Brama',
     );
   }
-  const missing = ['url', 'key', 'bearer', 'agent_id'].filter((key) => !models.brama?.[key]);
+  if (declared.length !== 1) {
+    throw new LlmError(
+      declared.length === 0
+        ? 'no model backend is configured: declare models.brama, or models.openai_compatible ' +
+            '(url, bearer, model) for a provider without Brama'
+        : 'both models.brama and models.openai_compatible are declared: keep the one this pipeline uses',
+    );
+  }
+  if (models.openai_compatible) {
+    const cfg = models.openai_compatible;
+    requireFields('openai_compatible', cfg, ['url', 'bearer', 'model']);
+    return completer(cfg, fetch_, 'the model provider', () => ({}));
+  }
+  const cfg = models.brama;
+  requireFields('brama', cfg, ['url', 'key', 'bearer', 'agent_id']);
+  // x-agent-id + x-agent-timestamp + x-agent-signature =
+  // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>"),
+  // mirroring weles' signedRouterHeaders.
+  const sign = (bodyStr) => {
+    const ts = String(Math.floor(Date.now() / 1000));
+    const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
+    const signature = createHmac('sha256', cfg.key)
+      .update(`${cfg.agent_id}:${ts}:${bodyHash}`)
+      .digest('hex');
+    return { 'x-agent-id': cfg.agent_id, 'x-agent-timestamp': ts, 'x-agent-signature': signature };
+  };
+  return completer(cfg, fetch_, 'brama', sign);
+}
+
+function requireFields(backend, cfg, fields) {
+  const missing = fields.filter((key) => !cfg?.[key]);
   if (missing.length > 0) {
     throw new LlmError(
-      `Brama is not configured: models.brama.${missing.join(', models.brama.')} missing ` +
+      `models.${backend} is not configured: models.${backend}.${missing.join(`, models.${backend}.`)} missing ` +
         '(skarbiec:// references in pipeline.config.json)',
     );
   }
-  return bramaCompleter(models.brama, fetch_);
 }
 
-/** Brama router shape — HMAC-signed requests (mirrors weles' signedRouterHeaders). */
-function bramaCompleter(cfg, fetch_) {
+/** One OpenAI-compatible chat completion per call; `sign` adds the backend's own headers. */
+function completer(cfg, fetch_, label, sign) {
   const url = `${cfg.url.replace(/\/+$/, '')}/v1/chat/completions`;
   return async function complete({ system, messages, maxTokens = 4096 }) {
     const bodyStr = JSON.stringify({
@@ -48,16 +83,8 @@ function bramaCompleter(cfg, fetch_) {
       max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
     });
-    // x-agent-id + x-agent-timestamp + x-agent-signature =
-    // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>").
-    const { createHash, createHmac } = await import('node:crypto');
     // One request. A refusal, an empty answer or a transport failure is
-    // returned as that error, naming what Brama said (cli.md rule 8).
-    const ts = String(Math.floor(Date.now() / 1000));
-    const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
-    const signature = createHmac('sha256', cfg.key)
-      .update(`${cfg.agent_id}:${ts}:${bodyHash}`)
-      .digest('hex');
+    // returned as that error, naming what the backend said (cli.md rule 8).
     let response;
     try {
       response = await fetch_(url, {
@@ -65,26 +92,24 @@ function bramaCompleter(cfg, fetch_) {
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${cfg.bearer}`,
-          'x-agent-id': cfg.agent_id,
-          'x-agent-timestamp': ts,
-          'x-agent-signature': signature,
+          ...sign(bodyStr),
         },
         body: bodyStr,
       });
     } catch (error) {
-      throw new LlmError(`brama unreachable at ${url}: ${error.message}`, { cause: error });
+      throw new LlmError(`${label} unreachable at ${url}: ${error.message}`, { cause: error });
     }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new LlmError(
-        `brama HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`,
+        `${label} HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`,
         { status: response.status },
       );
     }
     const text = body.choices?.[0]?.message?.content ?? '';
     if (!text.trim()) {
       throw new LlmError(
-        `brama answered with no content (finish_reason ${body.choices?.[0]?.finish_reason ?? 'none'})`,
+        `${label} answered with no content (finish_reason ${body.choices?.[0]?.finish_reason ?? 'none'})`,
         { status: response.status },
       );
     }
