@@ -80,10 +80,10 @@ bpy.context.scene.frame_set(1)
 print('dragon-actions', [(action.name, tuple(action.frame_range)) for action in bpy.data.actions if action.name in {'idle', 'flap'}])
 `;
 
-export async function animatePreset({ inputPath, outputPath, preset = 'dragon', sessionOptions } = {}) {
+export async function animatePreset({ inputPath, outputPath, preset, sessionOptions } = {}) {
   if (!inputPath) throw new AnimateError('inputPath is required');
   if (!outputPath) throw new AnimateError('outputPath is required');
-  if (preset !== 'dragon') throw new AnimateError(`unknown animation preset: ${preset}`);
+  if (preset !== 'dragon') throw new AnimateError(`unknown animation preset: ${preset}; available presets: dragon`);
   const session = await BlenderSession.start(sessionOptions ?? {});
   try {
     await session.importModel(inputPath);

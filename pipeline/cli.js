@@ -188,7 +188,12 @@ async function main() {
       return;
     }
     case 'showcase': {
-      const asset = positional[0] ?? 'dragon';
+      const asset = positional[0];
+      if (!asset) {
+        console.error('error: showcase requires an asset name; available assets: dragon');
+        process.exitCode = 2;
+        return;
+      }
       let config = {};
       try {
         config = await loadPipelineConfig(configPath);
@@ -217,11 +222,16 @@ async function main() {
       } catch {
         // config optional — blender.mcp defaults apply without it
       }
+      if (!options.preset || options.preset === true) {
+        console.error('error: animate requires --preset <name>; available presets: dragon');
+        process.exitCode = 2;
+        return;
+      }
       const output = options.out ?? file.replace(/\.glb$/i, '-animated.glb');
       const result = await animatePreset({
         inputPath: file,
         outputPath: output,
-        preset: options.preset ?? 'dragon',
+        preset: options.preset,
         sessionOptions: config.blender?.mcp,
       });
       print(result);

@@ -74,7 +74,7 @@ motion). `animate` supplies deterministic, visibly moving presets when an
 LLM-authored clip is structurally present but visually static. `preview-anim`
 renders one clip through Blender into a looping GIF.
 
-`showcase dragon` builds a deterministic cohesive reference asset — rigid
+`showcase dragon` builds a deterministic cohesive reference asset (the asset name is required; `dragon` is the one asset that exists) — rigid
 mesh parts bone-parented to a compact armature — for animation regression and
 visual review. It replaces the disconnected LLM prototype.
 

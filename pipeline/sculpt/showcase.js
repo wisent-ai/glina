@@ -227,9 +227,9 @@ scene.frame_set(1)
 print('showcase-dragon', len([o for o in bpy.data.objects if o.type == 'MESH']), 'mesh objects')
 `;
 
-export async function buildShowcase({ outputPath, asset = 'dragon', sessionOptions } = {}) {
+export async function buildShowcase({ outputPath, asset, sessionOptions } = {}) {
   if (!outputPath) throw new ShowcaseError('outputPath is required');
-  if (asset !== 'dragon') throw new ShowcaseError(`unknown showcase asset: ${asset}`);
+  if (asset !== 'dragon') throw new ShowcaseError(`unknown showcase asset: ${asset}; available assets: dragon`);
   const session = await BlenderSession.start(sessionOptions ?? {});
   try {
     await session.execute(DRAGON_SHOWCASE);

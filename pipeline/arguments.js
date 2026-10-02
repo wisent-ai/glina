@@ -85,9 +85,9 @@ commands:
                                   LLM (Opus) iteratively builds the model in Blender
   preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif]
                                   render an animated GIF of one clip through Blender
-  animate [file.glb] [--preset dragon] [--out animated.glb]
+  animate [file.glb] --preset <name> [--out animated.glb]
                                   apply deterministic, visibly moving actions
-  showcase dragon [--out dragon.glb]
+  showcase <asset> [--out <asset>-showcase.glb]
                                   build a cohesive animated reference asset
   verify [file.glb] [--config path]   structural + optional render gate
   check-config [--config path]
