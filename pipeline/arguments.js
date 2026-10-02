@@ -86,9 +86,13 @@ commands:
   preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif]
                                   render an animated GIF of one clip through Blender
   animate [file.glb] --preset <name> [--out animated.glb]
-                                  apply deterministic, visibly moving actions
+                                  apply a declared preset's visibly moving actions
   showcase <asset> [--out <asset>-showcase.glb]
-                                  build a cohesive animated reference asset
+                                  build a declared animated reference asset
+  showcases [list | add <name> <file.json> | remove <name>]
+  presets [list | add <name> <file.json> | remove <name>]
+                                  the declarations showcase and animate read
+                                  (assets/showcases, assets/presets)
   verify [file.glb] [--config path]   structural + optional render gate
   check-config [--config path]
   weles-tools

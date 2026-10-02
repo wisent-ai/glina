@@ -1,0 +1,87 @@
+{
+  "rig": "DragonRig",
+  "frames": [1, 25],
+  "materials": [
+    { "name": "Wing membrane", "color": [0.08, 0.48, 0.24, 1.0], "metallic": 0.0, "roughness": 0.75 },
+    { "name": "Emerald scales", "color": [0.03, 0.34, 0.12, 1.0], "metallic": 0.0, "roughness": 0.75 },
+    { "name": "Belly plates", "color": [0.62, 0.55, 0.25, 1.0], "metallic": 0.12, "roughness": 0.75 },
+    { "name": "Ivory horn", "color": [0.72, 0.66, 0.48, 1.0], "metallic": 0.0, "roughness": 0.75 },
+    { "name": "Amber eye", "color": [1.0, 0.24, 0.01, 1.0], "metallic": 0.25, "roughness": 0.25 }
+  ],
+  "parts": [
+    { "name": "Body", "shape": "ico", "location": [0, 0, 1.05], "scale": [0.95, 1.55, 0.82], "subdivisions": 2, "material": "Emerald scales", "bone": "body" },
+    { "name": "Chest", "shape": "ico", "location": [0, 0.85, 1.30], "scale": [0.82, 0.75, 0.88], "subdivisions": 1, "material": "Emerald scales", "bone": "body" },
+    { "name": "Neck", "shape": "cone", "start": [0, 1.15, 1.35], "end": [0, 2.00, 1.62], "radius_start": 0.48, "radius_end": 0.34, "vertices": 7, "material": "Emerald scales", "bone": "body" },
+    { "name": "Head", "shape": "ico", "location": [0, 2.25, 1.68], "scale": [0.55, 0.68, 0.48], "subdivisions": 1, "material": "Emerald scales", "bone": "head" },
+    { "name": "Snout", "shape": "ico", "location": [0, 2.75, 1.52], "scale": [0.42, 0.58, 0.28], "subdivisions": 1, "material": "Belly plates", "bone": "head" },
+    { "name": "Belly.00", "shape": "ico", "location": [0, -0.7, 0.57], "scale": [0.52, 0.34, 0.10], "subdivisions": 1, "material": "Belly plates", "bone": "body" },
+    { "name": "Belly.01", "shape": "ico", "location": [0, -0.15, 0.57], "scale": [0.52, 0.34, 0.10], "subdivisions": 1, "material": "Belly plates", "bone": "body" },
+    { "name": "Belly.02", "shape": "ico", "location": [0, 0.40, 0.57], "scale": [0.52, 0.34, 0.10], "subdivisions": 1, "material": "Belly plates", "bone": "body" },
+    { "name": "Belly.03", "shape": "ico", "location": [0, 0.95, 0.57], "scale": [0.52, 0.34, 0.10], "subdivisions": 1, "material": "Belly plates", "bone": "body" },
+    { "name": "Leg.00", "shape": "cone", "start": [-0.58, 0.70, 0.75], "end": [-0.78, 0.70, 0.10], "radius_start": 0.22, "radius_end": 0.15, "vertices": 6, "material": "Emerald scales", "bone": "body" },
+    { "name": "Foot.00", "shape": "cone", "start": [-0.78, 0.70, 0.10], "end": [-0.96, 0.88, -0.08], "radius_start": 0.16, "radius_end": 0.09, "vertices": 6, "material": "Belly plates", "bone": "body" },
+    { "name": "Leg.01", "shape": "cone", "start": [0.58, 0.70, 0.75], "end": [0.78, 0.70, 0.10], "radius_start": 0.22, "radius_end": 0.15, "vertices": 6, "material": "Emerald scales", "bone": "body" },
+    { "name": "Foot.01", "shape": "cone", "start": [0.78, 0.70, 0.10], "end": [0.96, 0.88, -0.08], "radius_start": 0.16, "radius_end": 0.09, "vertices": 6, "material": "Belly plates", "bone": "body" },
+    { "name": "Leg.02", "shape": "cone", "start": [-0.62, -0.70, 0.72], "end": [-0.82, -0.70, 0.10], "radius_start": 0.22, "radius_end": 0.15, "vertices": 6, "material": "Emerald scales", "bone": "body" },
+    { "name": "Foot.02", "shape": "cone", "start": [-0.82, -0.70, 0.10], "end": [-1.00, -0.52, -0.08], "radius_start": 0.16, "radius_end": 0.09, "vertices": 6, "material": "Belly plates", "bone": "body" },
+    { "name": "Leg.03", "shape": "cone", "start": [0.62, -0.70, 0.72], "end": [0.82, -0.70, 0.10], "radius_start": 0.22, "radius_end": 0.15, "vertices": 6, "material": "Emerald scales", "bone": "body" },
+    { "name": "Foot.03", "shape": "cone", "start": [0.82, -0.70, 0.10], "end": [1.00, -0.52, -0.08], "radius_start": 0.16, "radius_end": 0.09, "vertices": 6, "material": "Belly plates", "bone": "body" },
+    { "name": "Tail.00", "shape": "cone", "start": [0, -1.25, 0.95], "end": [0, -2.10, 0.78], "radius_start": 0.38, "radius_end": 0.30, "vertices": 7, "material": "Emerald scales", "bone": "tail1" },
+    { "name": "Tail.01", "shape": "cone", "start": [0, -2.10, 0.78], "end": [0, -2.90, 0.55], "radius_start": 0.31, "radius_end": 0.24, "vertices": 7, "material": "Emerald scales", "bone": "tail2" },
+    { "name": "Tail.02", "shape": "cone", "start": [0, -2.90, 0.55], "end": [0, -3.65, 0.38], "radius_start": 0.24, "radius_end": 0.18, "vertices": 7, "material": "Emerald scales", "bone": "tail3" },
+    { "name": "Tail.03", "shape": "cone", "start": [0, -3.65, 0.38], "end": [0, -4.25, 0.28], "radius_start": 0.17, "radius_end": 0.12, "vertices": 7, "material": "Emerald scales", "bone": "tail3" },
+    { "name": "Wing.L.inner", "shape": "polygon", "points": [[0.55, 0.35, 1.25], [1.55, 0.45, 1.35], [1.25, -0.20, 0.78], [0.70, -0.25, 0.95]], "material": "Wing membrane", "bone": "wing.L.shoulder" },
+    { "name": "Wing.L.outer", "shape": "polygon", "points": [[1.55, 0.45, 1.35], [2.65, 0.20, 1.10], [2.25, -0.55, 0.55], [1.25, -0.20, 0.78]], "material": "Wing membrane", "bone": "wing.L.wrist" },
+    { "name": "Wing.L.finger.top", "shape": "cone", "start": [1.55, 0.45, 1.35], "end": [2.65, 0.20, 1.10], "radius_start": 0.07, "radius_end": 0.04, "vertices": 6, "material": "Emerald scales", "bone": "wing.L.wrist" },
+    { "name": "Wing.L.finger.low", "shape": "cone", "start": [1.55, 0.45, 1.35], "end": [2.25, -0.55, 0.55], "radius_start": 0.06, "radius_end": 0.03, "vertices": 6, "material": "Emerald scales", "bone": "wing.L.wrist" },
+    { "name": "Wing.R.inner", "shape": "polygon", "points": [[-0.55, 0.35, 1.25], [-1.55, 0.45, 1.35], [-1.25, -0.20, 0.78], [-0.70, -0.25, 0.95]], "material": "Wing membrane", "bone": "wing.R.shoulder" },
+    { "name": "Wing.R.outer", "shape": "polygon", "points": [[-1.55, 0.45, 1.35], [-2.65, 0.20, 1.10], [-2.25, -0.55, 0.55], [-1.25, -0.20, 0.78]], "material": "Wing membrane", "bone": "wing.R.wrist" },
+    { "name": "Wing.R.finger.top", "shape": "cone", "start": [-1.55, 0.45, 1.35], "end": [-2.65, 0.20, 1.10], "radius_start": 0.07, "radius_end": 0.04, "vertices": 6, "material": "Emerald scales", "bone": "wing.R.wrist" },
+    { "name": "Wing.R.finger.low", "shape": "cone", "start": [-1.55, 0.45, 1.35], "end": [-2.25, -0.55, 0.55], "radius_start": 0.06, "radius_end": 0.03, "vertices": 6, "material": "Emerald scales", "bone": "wing.R.wrist" },
+    { "name": "Horn.-1", "shape": "cone", "start": [-0.25, 2.30, 1.96], "end": [-0.48, 2.00, 2.35], "radius_start": 0.12, "radius_end": 0.01, "vertices": 6, "material": "Ivory horn", "bone": "head" },
+    { "name": "Eye.-1", "shape": "ico", "location": [-0.34, 2.64, 1.72], "scale": [0.08, 0.05, 0.08], "subdivisions": 1, "material": "Amber eye", "bone": "head" },
+    { "name": "Horn.1", "shape": "cone", "start": [0.25, 2.30, 1.96], "end": [0.48, 2.00, 2.35], "radius_start": 0.12, "radius_end": 0.01, "vertices": 6, "material": "Ivory horn", "bone": "head" },
+    { "name": "Eye.1", "shape": "ico", "location": [0.34, 2.64, 1.72], "scale": [0.08, 0.05, 0.08], "subdivisions": 1, "material": "Amber eye", "bone": "head" },
+    { "name": "Spike.00", "shape": "cone", "start": [0, -0.9, 1.72], "end": [0, -0.9, 2.10], "radius_start": 0.13, "radius_end": 0.01, "vertices": 5, "material": "Ivory horn", "bone": "body" },
+    { "name": "Spike.01", "shape": "cone", "start": [0, -0.35, 1.72], "end": [0, -0.35, 2.10], "radius_start": 0.13, "radius_end": 0.01, "vertices": 5, "material": "Ivory horn", "bone": "body" },
+    { "name": "Spike.02", "shape": "cone", "start": [0, 0.20, 1.72], "end": [0, 0.20, 2.10], "radius_start": 0.13, "radius_end": 0.01, "vertices": 5, "material": "Ivory horn", "bone": "body" },
+    { "name": "Spike.03", "shape": "cone", "start": [0, 0.75, 1.72], "end": [0, 0.75, 2.10], "radius_start": 0.13, "radius_end": 0.01, "vertices": 5, "material": "Ivory horn", "bone": "body" },
+    { "name": "Spike.04", "shape": "cone", "start": [0, 1.25, 1.72], "end": [0, 1.25, 2.10], "radius_start": 0.13, "radius_end": 0.01, "vertices": 5, "material": "Ivory horn", "bone": "body" }
+  ],
+  "bones": [
+    { "name": "body", "head": [0, 0, 0.4], "tail": [0, 0, 1.55] },
+    { "name": "head", "head": [0, 1.30, 1.35], "tail": [0, 2.55, 1.70], "parent": "body" },
+    { "name": "wing.L.shoulder", "head": [0.55, 0.35, 1.25], "tail": [1.55, 0.45, 1.35], "parent": "body" },
+    { "name": "wing.L.wrist", "head": [1.55, 0.45, 1.35], "tail": [2.65, 0.20, 1.10], "parent": "wing.L.shoulder" },
+    { "name": "wing.R.shoulder", "head": [-0.55, 0.35, 1.25], "tail": [-1.55, 0.45, 1.35], "parent": "body" },
+    { "name": "wing.R.wrist", "head": [-1.55, 0.45, 1.35], "tail": [-2.65, 0.20, 1.10], "parent": "wing.R.shoulder" },
+    { "name": "tail1", "head": [0, -1.10, 0.95], "tail": [0, -2.10, 0.78], "parent": "body" },
+    { "name": "tail2", "head": [0, -2.10, 0.78], "tail": [0, -3.05, 0.52], "parent": "tail1" },
+    { "name": "tail3", "head": [0, -3.05, 0.52], "tail": [0, -4.25, 0.28], "parent": "tail2" }
+  ],
+  "active": "flap",
+  "actions": [
+    {
+      "name": "flap",
+      "keyframes": [
+        { "frame": 1, "bones": { "wing.L.shoulder": { "rotation": [0, 0, 0.58] }, "wing.R.shoulder": { "rotation": [0, 0, -0.58] }, "wing.L.wrist": { "rotation": [0, 0, -0.28] }, "wing.R.wrist": { "rotation": [0, 0, 0.28] } } },
+        { "frame": 4, "bones": { "wing.L.shoulder": { "rotation": [0, 0, 0.20] }, "wing.R.shoulder": { "rotation": [0, 0, -0.20] }, "wing.L.wrist": { "rotation": [0, 0, -0.05] }, "wing.R.wrist": { "rotation": [0, 0, 0.05] } } },
+        { "frame": 8, "bones": { "wing.L.shoulder": { "rotation": [0, 0, -0.62] }, "wing.R.shoulder": { "rotation": [0, 0, 0.62] }, "wing.L.wrist": { "rotation": [0, 0, 0.34] }, "wing.R.wrist": { "rotation": [0, 0, -0.34] } } },
+        { "frame": 12, "bones": { "wing.L.shoulder": { "rotation": [0, 0, -0.28] }, "wing.R.shoulder": { "rotation": [0, 0, 0.28] }, "wing.L.wrist": { "rotation": [0, 0, 0.12] }, "wing.R.wrist": { "rotation": [0, 0, -0.12] } } },
+        { "frame": 17, "bones": { "wing.L.shoulder": { "rotation": [0, 0, 0.18] }, "wing.R.shoulder": { "rotation": [0, 0, -0.18] }, "wing.L.wrist": { "rotation": [0, 0, -0.38] }, "wing.R.wrist": { "rotation": [0, 0, 0.38] } } },
+        { "frame": 21, "bones": { "wing.L.shoulder": { "rotation": [0, 0, 0.50] }, "wing.R.shoulder": { "rotation": [0, 0, -0.50] }, "wing.L.wrist": { "rotation": [0, 0, -0.32] }, "wing.R.wrist": { "rotation": [0, 0, 0.32] } } },
+        { "frame": 25, "bones": { "wing.L.shoulder": { "rotation": [0, 0, 0.58] }, "wing.R.shoulder": { "rotation": [0, 0, -0.58] }, "wing.L.wrist": { "rotation": [0, 0, -0.28] }, "wing.R.wrist": { "rotation": [0, 0, 0.28] } } }
+      ]
+    },
+    {
+      "name": "idle",
+      "keyframes": [
+        { "frame": 1, "bones": { "head": { "rotation": [-0.08, 0, 0] }, "tail1": { "rotation": [0, 0, -0.14] }, "tail2": { "rotation": [0, 0, 0.22] }, "tail3": { "rotation": [0, 0, -0.32] } } },
+        { "frame": 13, "bones": { "head": { "rotation": [0.08, 0, 0] }, "tail1": { "rotation": [0, 0, 0.14] }, "tail2": { "rotation": [0, 0, -0.22] }, "tail3": { "rotation": [0, 0, 0.32] } } },
+        { "frame": 25, "bones": { "head": { "rotation": [-0.08, 0, 0] }, "tail1": { "rotation": [0, 0, -0.14] }, "tail2": { "rotation": [0, 0, 0.22] }, "tail3": { "rotation": [0, 0, -0.32] } } },
+        { "frame": 37, "bones": { "head": { "rotation": [0.08, 0, 0] }, "tail1": { "rotation": [0, 0, 0.14] }, "tail2": { "rotation": [0, 0, -0.22] }, "tail3": { "rotation": [0, 0, 0.32] } } },
+        { "frame": 49, "bones": { "head": { "rotation": [-0.08, 0, 0] }, "tail1": { "rotation": [0, 0, -0.14] }, "tail2": { "rotation": [0, 0, 0.22] }, "tail3": { "rotation": [0, 0, -0.32] } } }
+      ]
+    }
+  ]
+}

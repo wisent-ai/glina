@@ -22,6 +22,8 @@ import { sculptWithLlm } from './sculpt/llm_blender.js';
 import { renderAnimationPreview } from './sculpt/preview.js';
 import { animatePreset } from './sculpt/animate.js';
 import { buildShowcase } from './sculpt/showcase.js';
+import { DeclarationError, availability } from './rigs/declared.js';
+import { declarationCommand } from './rigs/commands.js';
 import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
 import { activeAssetPath, importAsset, workspaceSummary } from './host/workspace.js';
 export { redactSecrets } from "./arguments.js";
@@ -187,10 +189,15 @@ async function main() {
       print({ ...result, transcript: undefined, rounds: result.rounds });
       return;
     }
+    case 'showcases':
+    case 'presets': {
+      print(await declarationCommand(command.slice(0, -1), positional));
+      return;
+    }
     case 'showcase': {
       const asset = positional[0];
       if (!asset) {
-        console.error('error: showcase requires an asset name; available assets: dragon');
+        console.error(`error: showcase requires an asset name; ${await availability('showcase')}`);
         process.exitCode = 2;
         return;
       }
@@ -223,7 +230,7 @@ async function main() {
         // config optional — blender.mcp defaults apply without it
       }
       if (!options.preset || options.preset === true) {
-        console.error('error: animate requires --preset <name>; available presets: dragon');
+        console.error(`error: animate requires --preset <name>; ${await availability('preset')}`);
         process.exitCode = 2;
         return;
       }
@@ -287,6 +294,7 @@ const invokedDirectly = (() => {
 if (invokedDirectly) {
   main().catch((error) => {
     console.error(`error: ${error.message}`);
-    process.exitCode = 1;
+    // A name glina has not declared is a usage error, like an unknown command.
+    process.exitCode = error instanceof DeclarationError ? 2 : 1;
   });
 }

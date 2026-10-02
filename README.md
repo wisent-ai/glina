@@ -49,6 +49,8 @@ glina verify [assets/models/tower.glb]               # explicit or active GLB ga
 glina preview-anim [assets/models/dragon.glb]        # explicit or active animation preview
 glina animate [assets/models/dragon.glb] --preset dragon --out dragon-animated.glb
 glina showcase dragon --out assets/models/smok.glb   # cohesive animated reference
+glina showcases [list | add <name> <file.json> | remove <name>]
+glina presets [list | add <name> <file.json> | remove <name>]
 glina blender-health                                 # probe the Blender session
 glina weles-tools                                    # list browser-layer tools
 ```
@@ -74,9 +76,27 @@ motion). `animate` supplies deterministic, visibly moving presets when an
 LLM-authored clip is structurally present but visually static. `preview-anim`
 renders one clip through Blender into a looping GIF.
 
-`showcase dragon` builds a deterministic cohesive reference asset (the asset name is required; `dragon` is the one asset that exists) — rigid
+`showcase <asset>` builds a deterministic cohesive reference asset — rigid
 mesh parts bone-parented to a compact armature — for animation regression and
 visual review. It replaces the disconnected LLM prototype.
+
+Showcase assets and animation presets are declarations, not code: one JSON
+file each under `assets/showcases/` and `assets/presets/`, read by the one
+Blender interpreter in `pipeline/rigs/interpreter.js`. A showcase declares its
+`rig` name, `materials` (name, RGBA `color`, `metallic`, `roughness`), `parts`
+(`ico` with `location`/`scale`/`subdivisions`, `cone` from `start` to `end`
+with `radius_start`/`radius_end`/`vertices`, or `polygon` with `points`; each
+with a `material` and the `bone` it rides on), `bones` (`head`, `tail`,
+optional `parent`), `actions` (named lists of `keyframes`: a `frame`, bone
+poses with `rotation`/`location`, optional `root` pose), the `active` action and
+the scene `frames` range. A preset declares the same `actions`, `active` and
+`frames`, plus the `required_bones` the imported armature must have.
+`glina showcases add <name> <file.json>` (or `presets add`) checks the file is a
+JSON object whose `actions` include its `active` one, then declares it;
+`remove` withdraws it and `list` names what exists. An unknown name, a name
+already declared, a name that is not lowercase letters, digits and dashes, or
+an incomplete file is refused with exit status 2; `showcase dragon` and
+`animate --preset dragon` are the declarations shipped today.
 
 ## Verification gate
 
