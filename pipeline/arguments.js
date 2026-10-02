@@ -55,7 +55,7 @@ export function render(value, text) {
 export const COMMANDS = [
   { name: 'onboarding', usage: 'onboarding [--reset] [--asset file.glb] [--name id]', help: 'first-run import or walkthrough replay' },
   { name: 'import', usage: 'import <file.glb> [--name id] [--config path]', help: 'validate, persist, and activate an existing asset' },
-  { name: 'workspace', usage: 'workspace', help: 'list imported assets and the active input' },
+  { name: 'workspace', usage: 'workspace [list | select <id> | remove <id>]', help: 'list imported assets and the active input; make one active; or take one out and delete its copy (the source file stays)' },
   { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the Weles browser layer' },
   { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'LLM (Opus) iteratively builds the model in Blender' },
   { name: 'preview-anim', usage: 'preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif]', help: 'render an animated GIF of one clip through Blender' },

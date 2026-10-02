@@ -25,7 +25,8 @@ import { buildShowcase } from './sculpt/showcase.js';
 import { DeclarationError, availability } from './rigs/declared.js';
 import { declarationCommand } from './rigs/commands.js';
 import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
-import { activeAssetPath, importAsset, workspaceSummary } from './host/workspace.js';
+import { activeAssetPath, importAsset, workspaceSummary } from './workspace/assets.js';
+import { removeAsset, selectAsset } from './workspace/manage.js';
 import { DEFAULT_CONFIG, USAGE, commandHelp, parseArgs, render } from "./arguments.js";
 
 async function main() {
@@ -96,7 +97,17 @@ async function main() {
       return;
     }
     case 'workspace': {
-      print(await workspaceSummary());
+      const [action = 'list', id] = positional;
+      if (action === 'list') {
+        print(await workspaceSummary());
+        return;
+      }
+      if ((action === 'select' || action === 'remove') && id) {
+        print(action === 'select' ? await selectAsset(id) : await removeAsset(id));
+        return;
+      }
+      console.error(`error: workspace takes list, select <id> or remove <id>, not ${positional.join(' ')}`);
+      process.exitCode = 2;
       return;
     }
     case 'check-config': {

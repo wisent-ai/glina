@@ -1,93 +1,15 @@
-// Persistent Glina asset workspace. Import is the single boundary shared by
-// CLI onboarding, the reusable CLI command, and Glina Desktop's loopback API.
+// Taking an asset into the persistent Glina workspace. Import is the single
+// boundary shared by CLI onboarding, the reusable CLI command, and the
+// `glina import` run Glina Desktop starts; the workspace document itself is
+// in store.js, and choosing or removing an imported asset in manage.js.
 
 import { createHash, randomUUID } from 'node:crypto';
 import { constants as fsConstants, createReadStream } from 'node:fs';
-import { chmod, copyFile, link, mkdir, open, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
-import os from 'node:os';
+import { chmod, copyFile, link, mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { verifyAsset } from '../gate/verify.js';
-
-const WORKSPACE_SCHEMA = 'glina.workspace.v1';
-
-function workspaceRoot() {
-  const configured = process.env.XDG_DATA_HOME?.trim();
-  const root = configured || (os.homedir() ? path.join(os.homedir(), '.local', 'share') : '');
-  if (!root) {
-    throw new Error('HOME is unavailable; set HOME or XDG_DATA_HOME before importing a Glina asset');
-  }
-  return path.join(root, 'glina');
-}
-
-function manifestPath() {
-  return path.join(workspaceRoot(), 'workspace.json');
-}
-
-function emptyWorkspace() {
-  return { schema: WORKSPACE_SCHEMA, activeAsset: null, assets: [] };
-}
-
-async function readWorkspace() {
-  let body;
-  try {
-    body = await readFile(manifestPath(), 'utf8');
-  } catch (error) {
-    if (error?.code === 'ENOENT') return emptyWorkspace();
-    throw error;
-  }
-  let workspace;
-  try {
-    workspace = JSON.parse(body);
-  } catch (error) {
-    throw new Error(`Glina workspace is not valid JSON: ${manifestPath()}`, { cause: error });
-  }
-  if (
-    workspace?.schema !== WORKSPACE_SCHEMA
-    || !Array.isArray(workspace.assets)
-    || !(workspace.activeAsset === null || typeof workspace.activeAsset === 'string')
-  ) {
-    throw new Error(`unsupported Glina workspace schema in ${manifestPath()}`);
-  }
-  for (const asset of workspace.assets) {
-    const keys = Object.keys(asset).sort().join(',');
-    if (
-      keys !== 'digest,id,importedAt,path,source,stats'
-      || typeof asset.id !== 'string'
-      || typeof asset.digest !== 'string'
-      || typeof asset.path !== 'string'
-      || typeof asset.source !== 'string'
-      || typeof asset.importedAt !== 'string'
-      || !asset.stats
-      || typeof asset.stats !== 'object'
-    ) {
-      throw new Error(`invalid Glina asset entry in ${manifestPath()}`);
-    }
-  }
-  return workspace;
-}
-
-async function writeWorkspace(workspace) {
-  const destination = manifestPath();
-  await mkdir(path.dirname(destination), { recursive: true });
-  const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
-  const handle = await open(temporary, 'wx', 0o600);
-  try {
-    await handle.writeFile(`${JSON.stringify(workspace, null, 2)}\n`);
-    await handle.sync();
-  } catch (error) {
-    await handle.close().catch(() => {});
-    await rm(temporary, { force: true }).catch(() => {});
-    throw error;
-  }
-  await handle.close();
-  try {
-    await rename(temporary, destination);
-  } catch (error) {
-    await rm(temporary, { force: true }).catch(() => {});
-    throw error;
-  }
-}
+import { WORKSPACE_SCHEMA, readWorkspace, workspaceRoot, writeWorkspace } from './store.js';
 
 function validateName(name) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) {

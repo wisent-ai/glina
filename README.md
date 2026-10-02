@@ -47,7 +47,7 @@ Bins: `glina` (CLI) and `glina-mcp` (MCP stdio server for agents).
 ```sh
 glina onboarding [--reset] [--asset existing.glb]   # first-run import or replay
 glina import existing.glb [--name asset-id]          # validate, persist, activate
-glina workspace                                      # inspect retained assets
+glina workspace [list | select <id> | remove <id>]  # inspect, choose the active asset, or take one out
 glina check-config                                   # validate config + vault refs
 glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
 glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
