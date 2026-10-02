@@ -109,13 +109,12 @@ mesh/primitive sanity, triangle budget (default 6000 ±100%), materials/skins/
 animation clips and changing animation channels, file-size bounds, optional
 Blender render smoke. The gate fails the job; it never warns.
 
-## Proven results
+## Example outputs
 
-Generated end-to-end and gate-verified on live runs:
+Examples of generated assets:
 
-- `kamien.glb` — granite boulder with moss patches (12 bpy rounds, Brama →
-  Blender MCP, 2026-07-27)
-- `krasnolud-wojownik.glb` — dwarven warrior (local Brama, 2026-07-28)
+- `kamien.glb` — granite boulder with moss patches
+- `krasnolud-wojownik.glb` — dwarven warrior
 
 ## Surfaces
 
