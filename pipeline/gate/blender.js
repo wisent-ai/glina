@@ -10,7 +10,8 @@
 // executed through execute_blender_code, so the wrapper stays tiny and
 // every Blender behavior lives in config-driven code strings.
 
-import { McpStdioClient, WelesError } from '../host/weles.js';
+import { randomUUID } from 'node:crypto';
+import { McpStdioClient } from '../host/weles.js';
 
 export class BlenderError extends Error {
   constructor(message, { code, cause } = {}) {
@@ -104,14 +105,12 @@ export class BlenderSession {
    * Returns whatever the MCP tool reports back (usually the captured
    * stdout / last expression value as text).
    *
-   * The model's code is wrapped in try/except BEFORE sending: the addon's
-   * execute path has a nasty failure mode where an exception escaping the
-   * executed block kills the addon's server thread (every subsequent call
-   * gets "connection refused"). Wrapping turns model bugs into captured
-   * "GAC-EXEC-ERROR" output instead — the error still reaches the model
-   * on the next round, but the session survives.
+   * The Python body is wrapped in try/except so an exception does not kill the
+   * add-on thread. A fresh completion marker proves the body reached its end;
+   * an MCP answer without it is an error, regardless of its wording.
    */
   async execute(code) {
+    const marker = `glina-execute:${randomUUID()}`;
     const indented = code
       .split('\n')
       .map((line) => (line.trim() ? `    ${line}` : ''))
@@ -120,14 +119,14 @@ export class BlenderSession {
       'import traceback as _gac_tb',
       'try:',
       indented || '    pass',
+      `    print(${JSON.stringify(marker)})`,
       'except Exception as _gac_e:',
       '    print("GAC-EXEC-ERROR:", _gac_tb.format_exc())',
     ].join('\n');
     const result = await this.client.callTool('execute_blender_code', { code: wrapped });
     const output = String(result?.content?.map((c) => c.text ?? '').join('') ?? result);
-    if (output.includes('GAC-EXEC-ERROR:') || output.includes('Error executing code:')
-      || output.includes('Could not connect to Blender')) {
-      throw new BlenderError(`Blender execute_blender_code failed: ${output.trim()}`);
+    if (!output.includes(marker)) {
+      throw new BlenderError(`Blender execute_blender_code did not complete: ${output.trim() || 'empty answer'}`);
     }
     return output;
   }
