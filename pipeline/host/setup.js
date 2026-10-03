@@ -1,10 +1,11 @@
 // setup.js — automatic provisioning for the Blender pipeline layer.
 //
-// Installs + verifies everything the Blender MCP mode needs:
+// Installs + verifies the tools Glina needs, then installs the matching
+// Blender addon through the MCP package's supported installer:
 //   1. Blender itself        (brew cask on macOS, apt/snap on Linux)
-//   2. uv / uvx              (brew/installer — runs the blender-mcp server)
-//   3. blender-mcp package   (resolved through uvx)
-//
+//   2. uv / uvx              (brew/installer)
+//   3. mcp-for-blender       (resolved through uvx)
+//   4. Blender addon        (installed by mcp-for-blender)
 // `glina setup [--check] [--dry-run]` is the only command surface.
 // Idempotent: anything already present is verified, not reinstalled.
 
@@ -86,23 +87,26 @@ export async function provisionBlender({ dryRun = false, checkOnly = false, log 
     }
   }
 
-  // Verify blender-mcp resolves through uvx (downloads on first use).
+  // The MCP server alone is not enough: Blender needs the corresponding
+  // addon. The upstream installer preserves an unchanged addon and its backup.
   const uvx = await which('uvx');
   if (uvx && !checkOnly) {
-    log?.('resolving blender-mcp through uvx…');
     try {
-      await runExec(uvx, ['--from', 'blender-mcp', 'blender-mcp', '--help'], { dryRun, log });
-      report.push({ step: 'blender-mcp', status: dryRun ? 'would-resolve' : 'resolved' });
+      await runExec(uvx, ['mcp-for-blender', 'install-addon'], { dryRun, log });
+      report.push({ step: 'blender-addon', status: dryRun ? 'would-install' : 'installed' });
     } catch (error) {
-      // Not fatal — uvx will fetch on first pipeline run too.
-      report.push({ step: 'blender-mcp', status: 'resolve-failed', error: error.message });
-      log?.(`warn: blender-mcp resolve failed now (${error.message}); uvx will retry on first use`);
+      throw new SetupError(`failed to install blender-addon: ${error.message}`, {
+        step: 'blender-addon',
+        cause: error,
+      });
     }
   } else if (!uvx) {
-    report.push({ step: 'blender-mcp', status: 'blocked', reason: 'uvx missing' });
+    report.push({ step: 'blender-addon', status: 'blocked', reason: 'uvx missing' });
+  } else {
+    report.push({ step: 'blender-addon', status: 'not-checked', reason: 'run glina doctor to probe the live Blender addon' });
   }
 
-  const healthy = report.every((r) => ['present', 'installed', 'resolved', 'would-install', 'would-resolve'].includes(r.status) || r.step === 'blender-mcp');
-  return { healthy: checkOnly ? report.every((r) => r.status === 'present' || r.step === 'blender-mcp') : healthy, steps: report };
+  const healthy = report.every((r) => ['present', 'installed', 'would-install', 'not-checked'].includes(r.status));
+  return { healthy, steps: report };
 }
 

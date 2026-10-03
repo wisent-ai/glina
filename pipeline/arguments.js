@@ -65,10 +65,10 @@ export const COMMANDS = [
   { name: 'showcases', usage: 'showcases [list | add <name> <file.json> | remove <name>]', help: 'manage bundled and user showcase declarations' },
   { name: 'presets', usage: 'presets [list | add <name> <file.json> | remove <name>]', help: 'manage bundled and user animation presets' },
   { name: 'verify', usage: 'verify [file.glb] [--config path]', help: 'structural + optional render gate' },
-  { name: 'check-config', usage: 'check-config [--config path]', help: 'validate the config and resolve its vault references' },
+  { name: 'check-config', usage: 'check-config [--config path]', help: 'validate the config, resolve vault references and check the model backend' },
   { name: 'export-config', usage: 'export-config --out <path> [--config path]', help: 'write a resolved, owner-only config for a remote run' },
   { name: 'doctor', usage: 'doctor [--config path]', help: 'check the config and vault references, the Blender MCP bridge (handshake + code probe) and the browser layer (Weles MCP tools); exits 1 when any check fails' },
-  { name: 'setup', usage: 'setup [--check] [--dry-run]', help: 'provision Blender + uv + blender-mcp' },
+  { name: 'setup', usage: 'setup [--check] [--dry-run]', help: 'provision Blender, uv and the MCP for Blender addon; --check inspects tools only' },
 ];
 
 const WIDTH = 34;

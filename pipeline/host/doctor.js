@@ -46,16 +46,16 @@ async function sculptorCheck(configPath) {
   try {
     session = await BlenderSession.start(sessionOptions ?? {});
   } catch (error) {
-    return { name: 'sculptor', ok: false, detail: { bridge: 'blender-mcp' }, error: error.message };
+    return { name: 'sculptor', ok: false, detail: { bridge: 'mcp-for-blender' }, error: error.message };
   }
   try {
     const health = await session.health();
     const tools = (await session.listTools()).map((tool) => tool.name);
-    const check = { name: 'sculptor', ok: health.healthy, detail: { bridge: 'blender-mcp', tools } };
+    const check = { name: 'sculptor', ok: health.healthy, detail: { bridge: 'mcp-for-blender', tools } };
     if (!health.healthy) check.error = health.error;
     return check;
   } catch (error) {
-    return { name: 'sculptor', ok: false, detail: { bridge: 'blender-mcp' }, error: error.message };
+    return { name: 'sculptor', ok: false, detail: { bridge: 'mcp-for-blender' }, error: error.message };
   } finally {
     await session.close();
   }

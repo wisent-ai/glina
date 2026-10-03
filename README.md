@@ -25,8 +25,8 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
    value that came from a reference as `<resolved: ok>`.
 2. **Browser**: only via the Weles MCP stdio server (`weles-mcp`), never a
    local Chromium/profile.
-3. **Blender**: only via a Blender MCP server (`uvx blender-mcp` default),
-   never hand-rolled sockets.
+3. **Blender**: only via the MCP for Blender server (`uvx mcp-for-blender`
+   default), never hand-rolled sockets.
 4. **Model access**: one backend under `models`. `models.brama` is
    [Brama](https://github.com/wisent-ai/brama), the org model router, with
    `url`, `key`, `bearer` and `agent_id`; requests are signed. Without Brama,
@@ -48,7 +48,7 @@ Bins: `glina` (CLI) and `glina-mcp` (MCP stdio server for agents).
 glina onboarding [--reset] [--asset existing.glb]   # first-run import or replay
 glina import existing.glb [--name asset-id] [--variant-of base-id]
 glina workspace [list | select <id> | remove <id>]  # inspect, activate, or remove
-glina check-config                                   # validate config + vault refs
+glina check-config                                   # validate config, vault refs and model backend
 glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
 glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
 glina verify [assets/models/tower.glb]               # explicit or active GLB gate
@@ -58,8 +58,13 @@ glina animate [rigged.glb] --preset motion --out build/moving.glb
 glina showcase biped --out build/biped.glb
 glina showcases [list | add <name> <file.json> | remove <name>]
 glina presets [list | add <name> <file.json> | remove <name>]
+glina setup [--check] [--dry-run]                     # provision Blender, uv and the matching addon
 glina doctor                                         # config, Blender bridge, browser layer; exit 1 on any failure
 ```
+
+`setup --check` inspects installed tools, not Blender's live addon. Run `doctor`
+to check the code round trip; an addon installed on disk can still be inactive
+in the running Blender process.
 
 MCP tools for agent hosts (`glina-mcp`): `glina_create_asset`,
 `glina_sculpt`, `glina_verify_asset`, `glina_check_config`, `glina_doctor`.

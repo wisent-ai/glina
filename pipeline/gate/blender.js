@@ -5,7 +5,7 @@
 // Blender, never a hand-managed Blender subprocess). The MCP server
 // bridges into Blender's own addon; `glina setup` provisions its tools.
 //
-// Tool surface used (blender-mcp): get_scene_info, execute_blender_code.
+// Tool surface used (mcp-for-blender): get_scene_info, execute_blender_code.
 // Anything else (export, decimate, rig) is expressed as Blender Python
 // executed through execute_blender_code, so the wrapper stays tiny and
 // every Blender behavior lives in config-driven code strings.
@@ -22,15 +22,15 @@ export class BlenderError extends Error {
   }
 }
 
-/** Default spawn for a blender-mcp server: uvx resolver first, binary fallback. */
+/** Default spawn for the MCP for Blender server: uvx resolver first, binary fallback. */
 export function blenderMcpSpawn(config = {}) {
   if (config.command) {
     return { command: config.command, args: config.args ?? [] };
   }
   if (config.uvx !== false) {
-    return { command: config.uvxBin ?? 'uvx', args: ['blender-mcp'] };
+    return { command: config.uvxBin ?? 'uvx', args: ['mcp-for-blender'] };
   }
-  return { command: 'blender-mcp', args: [] };
+  return { command: 'mcp-for-blender', args: [] };
 }
 
 export class BlenderSession {
@@ -50,7 +50,7 @@ export class BlenderSession {
     } catch (error) {
       throw new BlenderError(
         `blender MCP server failed to start (${spawn_.command} ${spawn_.args.join(' ')}): ${error.message}. ` +
-          `Run 'glina setup' to provision Blender + blender-mcp.`,
+          `Run 'glina setup' to provision Blender, mcp-for-blender and its addon.`,
         { cause: error },
       );
     }
