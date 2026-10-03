@@ -43,6 +43,13 @@ npm install -g @wisent-ai/glina     # or: npm install @wisent-ai/glina
 
 Bins: `glina` (CLI) and `glina-mcp` (MCP stdio server for agents).
 
+Releases go through Stado: `.wisent-release.json` packs the package with
+`stado product npm pack`, runs the test suite (`node --test`) on the release
+worker's checkout, and publishes the verified `npm-package.tgz` unchanged with
+`stado product deliver npm`. `stado product install glina --surface cli`
+installs that release. The example configuration ships as
+`docs/examples/pipeline.config.example.json`.
+
 ## Use
 
 ```sh

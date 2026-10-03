@@ -16,7 +16,7 @@
     "src",
     "assets",
     "pipeline",
-    "pipeline.config.example.json"
+    "docs/examples/pipeline.config.example.json"
   ],
   "keywords": [
     "threejs",
