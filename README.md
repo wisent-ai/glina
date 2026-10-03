@@ -122,11 +122,16 @@ Examples of generated assets:
 | macOS app | `wisent-ai/glina-desktop` |
 | Website | `wisent-ai/glina-landing` |
 
-The real CLI lifecycle tests live under `tests/workspace/` and `tests/animation/`.
-Run `node --test tests/workspace/*.test.mjs tests/animation/declarations.test.mjs`
-for workspace and declaration flows. `tests/preview/scene.test.mjs` and
-`tests/animation/catalogue.test.mjs` exercise live Blender and cannot pass
-with a disconnected add-on.
+The real CLI lifecycle tests live under `tests/cli/`, `tests/workspace/`
+and `tests/animation/`:
+
+```sh
+node --test tests/cli/*.test.mjs tests/workspace/*.test.mjs tests/animation/declarations.test.mjs
+```
+
+These cover the installed-bin shape, workspace and declarations.
+`tests/preview/scene.test.mjs` and `tests/animation/catalogue.test.mjs`
+exercise live Blender and cannot pass with a disconnected add-on.
 
 ## License
 
