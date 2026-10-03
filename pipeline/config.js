@@ -1,55 +1,31 @@
 // config.js — pipeline configuration loader with a strict secrets policy.
 //
-// A pipeline config is a JSON document where EVERY secret is written as a
-// `skarbiec://<item>/<field>` reference. The loader:
-//
-//   1. rejects any config value that looks like an inline secret
-//      (heuristic key names: token/secret/password/cookie/api_key), so
-//      credentials can't be smuggled past the vault;
-//   2. deep-resolves all skarbiec:// references through pipeline/skarbiec.js
-//      (the only module allowed to produce secret values);
-//   3. refuses to honor credential-shaped environment variables (see
-//      nonSecretEnv) — the vault is the single source of truth.
+// Credential fields have a declared structure. A hand-written config must
+// address those fields through Skarbiec; URLs, model names and selectors are
+// not guessed to be secrets from their spelling. References are resolved only
+// in memory. An export-config handoff marks its root as already resolved.
 
 import { readFile } from 'node:fs/promises';
 import { isSkarbiecRef, resolveConfigSecrets, SkarbiecError } from './host/skarbiec.js';
 import { buildCompleter } from './sculpt/llm.js';
 
-const SECRET_KEY_PATTERN = /(token|secret|password|passwd|credential|cookie|api[_-]?key|private[_-]?key)/i;
+function assertReference(value, path) {
+  if (value !== undefined && !isSkarbiecRef(value)) {
+    throw new SkarbiecError(
+      `config key '${path}' holds an inline value; ` +
+        'secrets must be skarbiec://<item>/<field> references',
+    );
+  }
+}
 
-/** Subtrees where secret VALUES live by contract — only these are guarded. */
-const SECRET_SUBTREES = new Set(['credentials', 'models']);
-
-function assertNoInlineSecrets(node, path = []) {
-  if (typeof node === 'string') {
-    return;
+function assertNoInlineSecrets(config) {
+  if (config?._resolved === true) return;
+  for (const [field, value] of Object.entries(config?.credentials ?? {})) {
+    assertReference(value, `credentials.${field}`);
   }
-  if (Array.isArray(node)) {
-    node.forEach((value, i) => assertNoInlineSecrets(value, [...path, i]));
-    return;
-  }
-  if (node && typeof node === 'object') {
-    // A resolver-produced file (see `cli.js export-config`) marks itself:
-    // its inline values came FROM the vault at submit time, so the guard
-    // does not apply. Hand-written configs never carry this marker.
-    if (node._resolved === true) return;
-    for (const [key, value] of Object.entries(node)) {
-      const childPath = [...path, key];
-      const inSecretSubtree = path.length > 0 && SECRET_SUBTREES.has(path[0]);
-      if (
-        inSecretSubtree &&
-        SECRET_KEY_PATTERN.test(key) &&
-        typeof value === 'string' &&
-        !isSkarbiecRef(value)
-      ) {
-        throw new SkarbiecError(
-          `config key '${childPath.join('.')}' holds an inline value; ` +
-            `secrets must be skarbiec://<item>/<field> references`,
-        );
-      }
-      assertNoInlineSecrets(value, childPath);
-    }
-  }
+  assertReference(config?.models?.brama?.key, 'models.brama.key');
+  assertReference(config?.models?.brama?.bearer, 'models.brama.bearer');
+  assertReference(config?.models?.openai_compatible?.bearer, 'models.openai_compatible.bearer');
 }
 
 /**
@@ -82,6 +58,11 @@ export async function loadOptionalPipelineConfig(path, implicitDefault) {
  */
 export async function checkPipelineConfig(path, { skarbiecOptions } = {}) {
   const config = await readPipelineConfig(path);
+  if (config?._resolved === true) {
+    throw new SkarbiecError(
+      'resolved handoff files contain inline secrets; check the original config instead',
+    );
+  }
   const resolved = await resolveConfigSecrets(config, skarbiecOptions ?? {});
   buildCompleter(resolved.models);
   return hideReferences(config);

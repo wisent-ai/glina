@@ -1,13 +1,9 @@
-// skarbiec.js — the ONLY source of secrets for the asset-creation pipeline.
+// skarbiec.js — resolves pipeline credential references.
 //
-// Hard rule: every credential the pipeline uses is resolved from the local
-// Skarbiec vault via its CLI. Nothing is read from process.env, browser
-// profiles, cookie databases, or key files on disk. Config carries
-// `skarbiec://<item-id>/<field>` references; this module is the single
-// place that turns them into values (in memory, never written out).
-//
-// The skarbiec CLI enforces the vault's own policy + audit on every read,
-// so callers inherit the vault's gating instead of re-implementing it.
+// Config keeps skarbiec://<item>/<field> references. Each value comes either
+// from the local Skarbiec CLI or an owner-only JSON credential file selected
+// by GLINA_CREDENTIALS_FILE. No credential value is read from an environment
+// variable. Skarbiec enforces its own vault policy and audit when selected.
 
 import { execFile } from 'node:child_process';
 

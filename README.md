@@ -20,9 +20,10 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
 1. **Secrets**: [Skarbiec](https://github.com/wisent-ai/skarbiec), or on a
    machine without it the owner-only JSON file `GLINA_CREDENTIALS_FILE` names
    (item → field → value, mode 600; a file others can read is refused). Config
-   holds `skarbiec://<item>/<field>` refs either way; the loader rejects inline
-   secrets and credential-shaped env vars. `glina check-config` prints every
-   value that came from a reference as `<resolved: ok>`.
+   holds `skarbiec://<item>/<field>` refs either way; the loader refuses inline
+   credential fields. `glina check-config` validates the selected model backend
+   and prints references as `<resolved: ok>`; it refuses resolved handoff files
+   because they contain plaintext secrets.
 2. **Browser**: only via the Weles MCP stdio server (`weles-mcp`), never a
    local Chromium/profile.
 3. **Blender**: only via the MCP for Blender server (`uvx mcp-for-blender`

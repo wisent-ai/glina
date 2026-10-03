@@ -32,6 +32,30 @@ test('check-config resolves supported model credentials and refuses unsupported 
     assert.equal(JSON.parse(accepted.stdout).models.brama.bearer, '<resolved: ok>');
     assert.deepEqual(JSON.parse(await readFile(configPath, 'utf8')).models, models);
 
+    await writeFile(configPath, JSON.stringify({ models: { openai_compatible: {
+      url: 'https://provider.example', bearer: 'inline-value', model: 'test',
+    } } }));
+    const inlineBearer = run();
+    assert.equal(inlineBearer.status, 1, inlineBearer.stdout);
+    assert.match(inlineBearer.stderr, /models\.openai_compatible\.bearer.*inline value/);
+    assert.equal(inlineBearer.stdout, '');
+
+    await writeFile(configPath, JSON.stringify({ models, credentials: { username: 'inline-value' } }));
+    const inlineUsername = run();
+    assert.equal(inlineUsername.status, 1, inlineUsername.stdout);
+    assert.match(inlineUsername.stderr, /credentials\.username.*inline value/);
+    assert.equal(inlineUsername.stdout, '');
+
+    await writeFile(configPath, JSON.stringify({
+      _resolved: true, models: { openai_compatible: {
+        url: 'https://provider.example', bearer: 'worker-secret', model: 'test',
+      } },
+    }));
+    const handoff = run();
+    assert.equal(handoff.status, 1, handoff.stdout);
+    assert.match(handoff.stderr, /resolved handoff.*check the original config/);
+    assert.equal(handoff.stdout, '');
+
     await writeFile(configPath, JSON.stringify({ models: { backend: 'openrouter', openrouter: {} } }));
     const refused = run();
     assert.equal(refused.status, 1, refused.stdout);
