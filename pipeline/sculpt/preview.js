@@ -6,10 +6,11 @@
 // pipeline; GIF assembly prefers ffmpeg and falls back to uv+Pillow so no
 // image library is ever vendored here.
 
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { mkdir, mkdtemp, readdir, rename, rm, stat } from 'node:fs/promises';
+import { join, dirname, basename, extname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { BlenderSession } from '../gate/blender.js';
+import { workspaceRoot } from '../workspace/store.js';
 
 export class PreviewError extends Error {}
 
@@ -178,5 +179,87 @@ export async function renderAnimationPreview({
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
     await session.close().catch(() => {});
+  }
+}
+
+/** Render an accepted GLB on a neutral ground with a framed camera and light. */
+export async function renderScenePreview({ glbPath, outPath, sessionOptions } = {}) {
+  if (!glbPath) throw new PreviewError('glbPath is required');
+  let finalOut = outPath;
+  if (!finalOut) {
+    const directory = join(workspaceRoot(), 'previews');
+    await mkdir(directory, { recursive: true });
+    finalOut = join(directory, `${basename(glbPath, extname(glbPath))}-scene.png`);
+  }
+  const temporaryDirectory = await mkdtemp(join(dirname(finalOut), '.glina-scene-'));
+  const temporary = join(temporaryDirectory, basename(finalOut));
+  let session;
+  try {
+    session = await BlenderSession.start(sessionOptions ?? {});
+    try {
+      await session.importModel(glbPath);
+    } catch (error) {
+      throw new PreviewError(`Blender could not import ${glbPath}: ${error.message}`, { cause: error });
+    }
+    const code = [
+      'import bpy, math, os',
+      'from mathutils import Vector',
+      'scene = bpy.context.scene',
+      'meshes = [obj for obj in bpy.data.objects if obj.type == "MESH"]',
+      'if not meshes: raise RuntimeError("the GLB contains no mesh to preview")',
+      'points = [obj.matrix_world @ Vector(corner) for obj in meshes for corner in obj.bound_box]',
+      'lo = Vector((min(p.x for p in points), min(p.y for p in points), min(p.z for p in points)))',
+      'hi = Vector((max(p.x for p in points), max(p.y for p in points), max(p.z for p in points)))',
+      'center = (lo + hi) / 2',
+      'radius = max((hi - lo).length / 2, 0.5)',
+      'floor_z = lo.z - max(radius * 0.03, 0.01)',
+      'bpy.ops.mesh.primitive_plane_add(size=2, location=(center.x, center.y, floor_z))',
+      'floor = bpy.context.object',
+      'floor.name = "Glina preview ground"',
+      'floor.scale = (radius * 2.5, radius * 2.5, 1)',
+      'mat = bpy.data.materials.new("Glina preview ground")',
+      'mat.diffuse_color = (0.28, 0.34, 0.30, 1)',
+      'floor.data.materials.append(mat)',
+      'camera_data = bpy.data.cameras.new("Glina preview camera")',
+      'camera = bpy.data.objects.new("Glina preview camera", camera_data)',
+      'scene.collection.objects.link(camera)',
+      'camera.location = center + Vector((1.1, -1.6, 1.25)).normalized() * radius * 3.5',
+      'camera.rotation_euler = (center - camera.location).to_track_quat("-Z", "Y").to_euler()',
+      'camera_data.type = "ORTHO"',
+      'camera_data.ortho_scale = radius * 4.8',
+      'scene.camera = camera',
+      'light_data = bpy.data.lights.new("Glina preview light", type="AREA")',
+      'light = bpy.data.objects.new("Glina preview light", light_data)',
+      'scene.collection.objects.link(light)',
+      'light.location = center + Vector((-1, -1, 2)) * radius * 2',
+      'light_data.energy = 800',
+      'light_data.shape = "DISK"',
+      'light_data.size = radius * 3',
+      'if scene.world is None: scene.world = bpy.data.worlds.new("Glina preview world")',
+      'scene.world.color = (0.35, 0.35, 0.35)',
+      'scene.render.engine = "BLENDER_EEVEE_NEXT" if hasattr(bpy.types, "BLENDER_EEVEE_NEXT") else "BLENDER_EEVEE"',
+      'scene.render.resolution_x = 768',
+      'scene.render.resolution_y = 768',
+      'scene.render.resolution_percentage = 100',
+      'scene.render.image_settings.file_format = "PNG"',
+      `scene.render.filepath = ${JSON.stringify(temporary)}`,
+      'bpy.ops.render.render(write_still=True)',
+      'print("rendered-scene", os.path.getsize(scene.render.filepath))',
+    ].join('\n');
+    const result = String(await session.execute(code));
+    let rendered;
+    try {
+      rendered = await stat(temporary);
+    } catch {
+      throw new PreviewError(`Blender produced no scene image at ${temporary}: ${result.slice(-400)}`);
+    }
+    if (!result.includes('rendered-scene') || result.includes('GAC-EXEC-ERROR') || rendered.size === 0) {
+      throw new PreviewError(`Blender scene render failed: ${result.slice(-400)}`);
+    }
+    await rename(temporary, finalOut);
+    return { outPath: finalOut, source: glbPath, bytes: rendered.size, scene: 'neutral-ground' };
+  } finally {
+    await session?.close().catch(() => {});
+    await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {});
   }
 }

@@ -54,15 +54,16 @@ export function render(value, text) {
 // and `glina <command> --help` is that command's row (cli.md rule 11).
 export const COMMANDS = [
   { name: 'onboarding', usage: 'onboarding [--reset] [--asset file.glb] [--name id]', help: 'first-run import or walkthrough replay' },
-  { name: 'import', usage: 'import <file.glb> [--name id] [--config path]', help: 'validate, persist, and activate an existing asset' },
+  { name: 'import', usage: 'import <file.glb> [--name id] [--variant-of base-id] [--config path]', help: 'validate, persist, and activate an asset or a variant of a base' },
   { name: 'workspace', usage: 'workspace [list | select <id> | remove <id>]', help: 'list imported assets and the active input; make one active; or take one out and delete its copy (the source file stays)' },
   { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the Weles browser layer' },
   { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'LLM (Opus) iteratively builds the model in Blender' },
-  { name: 'preview-anim', usage: 'preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif]', help: 'render an animated GIF of one clip through Blender' },
-  { name: 'animate', usage: 'animate [file.glb] --preset <name> [--out animated.glb]', help: "apply a declared preset's visibly moving actions" },
-  { name: 'showcase', usage: 'showcase <asset> [--out <asset>-showcase.glb]', help: 'build a declared animated reference asset' },
-  { name: 'showcases', usage: 'showcases [list | add <name> <file.json> | remove <name>]', help: 'the declarations showcase reads (assets/showcases)' },
-  { name: 'presets', usage: 'presets [list | add <name> <file.json> | remove <name>]', help: 'the declarations animate reads (assets/presets)' },
+  { name: 'preview-anim', usage: 'preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif] [--config path]', help: 'render an animated GIF of one clip through Blender' },
+  { name: 'preview-scene', usage: 'preview-scene [file.glb] [--out f.png] [--config path]', help: 'render the asset on neutral ground in a framed Blender scene' },
+  { name: 'animate', usage: 'animate [file.glb] --preset <name> [--out animated.glb] [--config path]', help: "apply a declared preset's visibly moving actions" },
+  { name: 'showcase', usage: 'showcase <asset> [--out file.glb] [--config path]', help: 'build a declared animated reference asset' },
+  { name: 'showcases', usage: 'showcases [list | add <name> <file.json> | remove <name>]', help: 'manage bundled and user showcase declarations' },
+  { name: 'presets', usage: 'presets [list | add <name> <file.json> | remove <name>]', help: 'manage bundled and user animation presets' },
   { name: 'verify', usage: 'verify [file.glb] [--config path]', help: 'structural + optional render gate' },
   { name: 'check-config', usage: 'check-config [--config path]', help: 'validate the config and resolve its vault references' },
   { name: 'export-config', usage: 'export-config --out <path> [--config path]', help: 'write a resolved, owner-only config for a remote run' },
@@ -86,7 +87,7 @@ models come from models.brama or, without Brama, models.openai_compatible;
 browser automation goes only through the Weles MCP server;
 Blender work goes only through the Blender MCP server.`;
 
-export const USAGE = `usage: node pipeline/cli.js <command> [args] [--text]
+export const USAGE = `usage: glina <command> [args] [--text]
 
 Every command prints its result as JSON; --text prints the same result as
 one path: value line per field. glina <command> --help prints one command.
@@ -100,6 +101,6 @@ ${BOUNDARIES}`;
 export function commandHelp(name) {
   const own = COMMANDS.filter((command) => command.name === name);
   if (own.length === 0) return USAGE;
-  return `usage: node pipeline/cli.js ${own[0].usage} [--text]\n\n${rows(own).join('\n')}\n\n${BOUNDARIES}`;
+  return `usage: glina ${own[0].usage} [--text]\n\n${rows(own).join('\n')}\n\n${BOUNDARIES}`;
 }
 

@@ -1,46 +1,52 @@
-// declared.js — the showcase assets and animation presets glina knows, as
-// JSON files under assets/showcases and assets/presets. `glina showcases` and
-// `glina presets` list, add and remove them; `glina showcase <asset>` and
-// `glina animate --preset <name>` read them. Adding one is adding a file.
+// Built-in declarations ship with the package; user additions live alongside
+// the workspace so an installed or read-only package remains usable.
 
+import { constants as fsConstants } from 'node:fs';
 import { copyFile, mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { workspaceRoot } from '../workspace/store.js';
 
 export class DeclarationError extends Error {}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const DIRECTORIES = {
-  showcase: join(ROOT, 'assets', 'showcases'),
-  preset: join(ROOT, 'assets', 'presets'),
+  showcase: 'showcases',
+  preset: 'presets',
 };
 
 const NAME = /^[a-z0-9][a-z0-9-]*$/;
 
-function directoryOf(kind) {
-  const found = DIRECTORIES[kind];
-  if (!found) throw new DeclarationError(`unknown declaration kind ${kind}`);
-  return found;
+function directoryOf(kind, user = false) {
+  const suffix = DIRECTORIES[kind];
+  if (!suffix) throw new DeclarationError(`unknown declaration kind ${kind}`);
+  return user ? join(workspaceRoot(), suffix) : join(ROOT, 'assets', suffix);
 }
 
-function pathOf(kind, name) {
+function pathOf(kind, name, user = false) {
   if (typeof name !== 'string' || !NAME.test(name)) {
     throw new DeclarationError(`${kind} name must be lowercase letters, digits and dashes; got ${JSON.stringify(name)}`);
   }
-  return join(directoryOf(kind), `${name}.json`);
+  return join(directoryOf(kind, user), `${name}.json`);
 }
 
 /** Every declared name of `kind`, sorted. */
 export async function list(kind) {
-  let entries;
-  try {
-    entries = await readdir(directoryOf(kind));
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    entries = [];
+  const names = new Set();
+  for (const directory of [directoryOf(kind), directoryOf(kind, true)]) {
+    let entries;
+    try {
+      entries = await readdir(directory);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      entries = [];
+    }
+    for (const entry of entries) {
+      if (entry.endsWith('.json')) names.add(entry.slice(0, -5));
+    }
   }
-  return entries.filter((entry) => entry.endsWith('.json')).map((entry) => entry.slice(0, -5)).sort();
+  return [...names].sort();
 }
 
 /** What glina says when asked for a name it does not have. */
@@ -70,7 +76,7 @@ async function parsed(path) {
   try {
     spec = JSON.parse(await readFile(path, 'utf8'));
   } catch (error) {
-    throw new DeclarationError(`${path}: ${error.message}`);
+    throw new DeclarationError(`${path}: ${error.message}`, { cause: error });
   }
   const wrong = problem(spec);
   if (wrong) throw new DeclarationError(`${path} ${wrong}`);
@@ -79,30 +85,42 @@ async function parsed(path) {
 
 /** The declaration `name` of `kind`; a refusal names the ones that exist. */
 export async function load(kind, name) {
+  const builtIn = pathOf(kind, name);
+  const user = pathOf(kind, name, true);
   if (!(await list(kind)).includes(name)) {
     throw new DeclarationError(`unknown ${kind} ${name}; ${await availability(kind)}`);
   }
-  return parsed(pathOf(kind, name));
+  try {
+    return await parsed(user);
+  } catch (error) {
+    if (error.cause?.code !== 'ENOENT') throw error;
+  }
+  return parsed(builtIn);
 }
 
 /** Declare `name` from the JSON file at `source`, after checking it. */
 export async function add(kind, name, source) {
-  const target = pathOf(kind, name);
+  const target = pathOf(kind, name, true);
   await parsed(source);
   if ((await list(kind)).includes(name)) {
     throw new DeclarationError(`${kind} ${name} is already declared; remove it first`);
   }
-  await mkdir(directoryOf(kind), { recursive: true });
-  await copyFile(source, target);
+  await mkdir(directoryOf(kind, true), { recursive: true });
+  await copyFile(source, target, fsConstants.COPYFILE_EXCL);
   return { kind, name, path: target, outcome: 'added' };
 }
 
-/** Withdraw the declaration `name`. */
+/** Withdraw only a user declaration, never one shipped with Glina. */
 export async function remove(kind, name) {
-  const target = pathOf(kind, name);
+  const target = pathOf(kind, name, true);
   if (!(await list(kind)).includes(name)) {
     throw new DeclarationError(`${kind} ${name} is not declared`);
   }
-  await rm(target);
+  try {
+    await rm(target);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    throw new DeclarationError(`${kind} ${name} is built in and cannot be removed`);
+  }
   return { kind, name, path: target, outcome: 'removed' };
 }

@@ -6,7 +6,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-export const WORKSPACE_SCHEMA = 'glina.workspace.v1';
+export const WORKSPACE_SCHEMA = 'glina.workspace.v2';
 
 export function workspaceRoot() {
   const configured = process.env.XDG_DATA_HOME?.trim();
@@ -40,16 +40,17 @@ export async function readWorkspace() {
     throw new Error(`Glina workspace is not valid JSON: ${manifestPath()}`, { cause: error });
   }
   if (
-    workspace?.schema !== WORKSPACE_SCHEMA
+    !['glina.workspace.v1', WORKSPACE_SCHEMA].includes(workspace?.schema)
     || !Array.isArray(workspace.assets)
     || !(workspace.activeAsset === null || typeof workspace.activeAsset === 'string')
   ) {
     throw new Error(`unsupported Glina workspace schema in ${manifestPath()}`);
   }
+  const legacy = workspace.schema === 'glina.workspace.v1';
   for (const asset of workspace.assets) {
     const keys = Object.keys(asset).sort().join(',');
     if (
-      keys !== 'digest,id,importedAt,path,source,stats'
+      keys !== (legacy ? 'digest,id,importedAt,path,source,stats' : 'digest,id,importedAt,path,source,stats,variantOf')
       || typeof asset.id !== 'string'
       || typeof asset.digest !== 'string'
       || typeof asset.path !== 'string'
@@ -57,8 +58,23 @@ export async function readWorkspace() {
       || typeof asset.importedAt !== 'string'
       || !asset.stats
       || typeof asset.stats !== 'object'
+      || (!legacy && !(asset.variantOf === null || typeof asset.variantOf === 'string'))
     ) {
       throw new Error(`invalid Glina asset entry in ${manifestPath()}`);
+    }
+    if (legacy) asset.variantOf = null;
+  }
+  workspace.schema = WORKSPACE_SCHEMA;
+  const ids = new Set(workspace.assets.map((asset) => asset.id));
+  if (ids.size !== workspace.assets.length || (workspace.activeAsset !== null && !ids.has(workspace.activeAsset))) {
+    throw new Error(`invalid Glina asset references in ${manifestPath()}`);
+  }
+  for (const asset of workspace.assets) {
+    if (asset.variantOf !== null) {
+      const parent = workspace.assets.find((candidate) => candidate.id === asset.variantOf);
+      if (!parent || parent.variantOf !== null || parent.id === asset.id) {
+        throw new Error(`invalid Glina variant parent for ${asset.id} in ${manifestPath()}`);
+      }
     }
   }
   return workspace;

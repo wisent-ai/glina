@@ -46,15 +46,16 @@ Bins: `glina` (CLI) and `glina-mcp` (MCP stdio server for agents).
 
 ```sh
 glina onboarding [--reset] [--asset existing.glb]   # first-run import or replay
-glina import existing.glb [--name asset-id]          # validate, persist, activate
-glina workspace [list | select <id> | remove <id>]  # inspect, choose the active asset, or take one out
+glina import existing.glb [--name asset-id] [--variant-of base-id]
+glina workspace [list | select <id> | remove <id>]  # inspect, activate, or remove
 glina check-config                                   # validate config + vault refs
 glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
 glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
 glina verify [assets/models/tower.glb]               # explicit or active GLB gate
-glina preview-anim [assets/models/dragon.glb]        # explicit or active animation preview
-glina animate [assets/models/dragon.glb] --preset dragon --out dragon-animated.glb
-glina showcase dragon --out assets/models/smok.glb   # cohesive animated reference
+glina preview-anim [assets/models/dragon.glb]        # one clip as an animated GIF
+glina preview-scene [assets/models/dragon.glb]       # neutral-ground PNG via Blender
+glina animate [rigged.glb] --preset motion --out build/moving.glb
+glina showcase biped --out build/biped.glb
 glina showcases [list | add <name> <file.json> | remove <name>]
 glina presets [list | add <name> <file.json> | remove <name>]
 glina doctor                                         # config, Blender bridge, browser layer; exit 1 on any failure
@@ -64,12 +65,14 @@ MCP tools for agent hosts (`glina-mcp`): `glina_create_asset`,
 `glina_sculpt`, `glina_verify_asset`, `glina_check_config`, `glina_doctor`.
 
 `glina import` accepts existing GLB data without invoking a model. It stages the
-exact bytes, runs `pipeline/verify.js` (including configured Blender smoke),
-then commits only an accepted asset under `$XDG_DATA_HOME/glina` or
-`~/.local/share/glina`. Repeated SHA-256 content is `unchanged`; the same name
-with different content is `conflicting`; invalid data is `rejected` without a
-partial manifest update. The active destination is the default for `verify`,
-`animate`, and `preview-anim` when their path is omitted.
+exact bytes, runs the canonical structural and configured Blender gate, then
+commits only accepted content under `$XDG_DATA_HOME/glina` or
+`~/.local/share/glina`. `--variant-of` links a distinct accepted asset to an
+existing base; removing that base is refused until its variants are removed.
+Repeated SHA-256 content is `unchanged`; the same name with different content
+is `conflicting`; invalid data is `rejected` without a partial manifest update.
+The active destination is the default for `verify`, `animate`, `preview-anim`,
+and `preview-scene` when their path is omitted.
 
 ## Animations
 
@@ -78,29 +81,24 @@ produce rigged assets: the model builds an armature, parents the mesh with
 automatic weights, and keyframes named Actions ("idle" plus one characteristic
 motion). `animate` supplies deterministic, visibly moving presets when an
 LLM-authored clip is structurally present but visually static. `preview-anim`
-renders one clip through Blender into a looping GIF.
+renders one clip through Blender into a looping GIF. `preview-scene` renders
+the selected model on neutral ground as a PNG, with a bounds-framed camera;
+both require a live Blender MCP session and report the failed operation.
 
 `showcase <asset>` builds a deterministic cohesive reference asset — rigid
 mesh parts bone-parented to a compact armature — for animation regression and
 visual review. It replaces the disconnected LLM prototype.
 
-Showcase assets and animation presets are declarations, not code: one JSON
-file each under `assets/showcases/` and `assets/presets/`, read by the one
-Blender interpreter in `pipeline/rigs/interpreter.js`. A showcase declares its
-`rig` name, `materials` (name, RGBA `color`, `metallic`, `roughness`), `parts`
-(`ico` with `location`/`scale`/`subdivisions`, `cone` from `start` to `end`
-with `radius_start`/`radius_end`/`vertices`, or `polygon` with `points`; each
-with a `material` and the `bone` it rides on), `bones` (`head`, `tail`,
-optional `parent`), `actions` (named lists of `keyframes`: a `frame`, bone
-poses with `rotation`/`location`, optional `root` pose), the `active` action and
-the scene `frames` range. A preset declares the same `actions`, `active` and
-`frames`, plus the `required_bones` the imported armature must have.
-`glina showcases add <name> <file.json>` (or `presets add`) checks the file is a
-JSON object whose `actions` include its `active` one, then declares it;
-`remove` withdraws it and `list` names what exists. An unknown name, a name
-already declared, a name that is not lowercase letters, digits and dashes, or
-an incomplete file is refused with exit status 2; `showcase dragon` and
-`animate --preset dragon` are the declarations shipped today.
+Showcase assets and animation presets are declarations interpreted by
+`pipeline/rigs/interpreter.js`, not separate generators. Glina ships `dragon`
+and `biped` showcases and `dragon` and `motion` presets. The latter has idle,
+travel and attack clips without required bone names, for any rigged GLB.
+Built-in JSON files live under `assets/showcases/` and `assets/presets/`.
+`glina showcases add <name> <file.json>` (or `presets add`) validates the
+declaration and stores it under the user workspace; `remove` withdraws only
+custom declarations. Built-ins cannot be removed, and an unknown or malformed
+declaration is refused with exit status 2. See the [declaration and animation
+contracts](https://glina.wisent.com/docs/cli/animate).
 
 ## Verification gate
 
@@ -124,9 +122,11 @@ Examples of generated assets:
 | macOS app | `wisent-ai/glina-desktop` |
 | Website | `wisent-ai/glina-landing` |
 
-Quality journeys and visual evaluation are registered in **Probierz**
-(`apps/game-asset-creator`); package-local unit tests (`npm test`) stay for
-fast iteration only.
+The real CLI lifecycle tests live under `tests/workspace/` and `tests/animation/`.
+Run `node --test tests/workspace/*.test.mjs tests/animation/declarations.test.mjs`
+for workspace and declaration flows. `tests/preview/scene.test.mjs` and
+`tests/animation/catalogue.test.mjs` exercise live Blender and cannot pass
+with a disconnected add-on.
 
 ## License
 

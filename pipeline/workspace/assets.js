@@ -53,7 +53,7 @@ function rejected(source, reason, verification) {
  * make the accepted copy the active input. The staging file is the exact bytes
  * verified, closing the source-change gap between validation and persistence.
  */
-export async function importAsset(source, { name, config = {} } = {}) {
+export async function importAsset(source, { name, variantOf = null, config = {} } = {}) {
   const sourceText = String(source ?? '').trim();
   if (!sourceText) return rejected(sourceText, 'asset import requires a .glb path');
   if (path.extname(sourceText).toLowerCase() !== '.glb') {
@@ -72,6 +72,10 @@ export async function importAsset(source, { name, config = {} } = {}) {
   const id = name === undefined ? derivedName(resolvedSource) : String(name);
   const nameProblem = validateName(id);
   if (nameProblem) return rejected(resolvedSource, nameProblem);
+  if (variantOf !== null && (typeof variantOf !== 'string' || !variantOf.trim())) {
+    return rejected(resolvedSource, 'variant parent must be an existing base asset id');
+  }
+
 
   const root = workspaceRoot();
   const assetsDirectory = path.join(root, 'assets');
@@ -103,7 +107,22 @@ export async function importAsset(source, { name, config = {} } = {}) {
 
   const digest = await digestFile(temporary);
   const workspace = await readWorkspace();
+  if (variantOf !== null) {
+    const parent = workspace.assets.find((asset) => asset.id === variantOf);
+    if (!parent) {
+      await rm(temporary, { force: true });
+      return rejected(resolvedSource, `variant parent ${variantOf} is not in the Glina workspace`);
+    }
+    if (parent.variantOf !== null) {
+      await rm(temporary, { force: true });
+      return rejected(resolvedSource, `variant parent ${variantOf} is itself a variant; choose a base asset`);
+    }
+  }
   const duplicate = workspace.assets.find((asset) => asset.digest === digest);
+  if (duplicate && variantOf !== null) {
+    await rm(temporary, { force: true });
+    return rejected(resolvedSource, `variant has the same content as existing asset ${duplicate.id}; choose a distinct GLB`);
+  }
   if (duplicate) {
     await rm(temporary, { force: true });
     workspace.activeAsset = duplicate.id;
@@ -113,6 +132,7 @@ export async function importAsset(source, { name, config = {} } = {}) {
       source: resolvedSource,
       id: duplicate.id,
       path: duplicate.path,
+      variantOf: duplicate.variantOf,
       reason: null,
       verification: { ...verification, path: duplicate.path },
     };
@@ -161,6 +181,7 @@ export async function importAsset(source, { name, config = {} } = {}) {
     source: resolvedSource,
     importedAt: new Date().toISOString(),
     stats: verification.stats,
+    variantOf,
   });
   workspace.activeAsset = id;
   try {
@@ -175,6 +196,7 @@ export async function importAsset(source, { name, config = {} } = {}) {
     source: resolvedSource,
     id,
     path: destination,
+    variantOf,
     reason: null,
     verification: { ...verification, path: destination },
   };

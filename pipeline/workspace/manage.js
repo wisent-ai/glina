@@ -33,6 +33,10 @@ export async function selectAsset(id) {
  */
 export async function removeAsset(id) {
   const workspace = await readWorkspace();
+  const variants = workspace.assets.filter((candidate) => candidate.variantOf === id).map((candidate) => candidate.id);
+  if (variants.length) {
+    throw new Error(`asset ${id} has variants ${variants.join(', ')}; remove those variants before their base asset`);
+  }
   const asset = requireKnown(workspace, id);
   workspace.assets = workspace.assets.filter((candidate) => candidate.id !== id);
   if (workspace.activeAsset === id) workspace.activeAsset = null;

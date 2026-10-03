@@ -124,7 +124,12 @@ export class BlenderSession {
       '    print("GAC-EXEC-ERROR:", _gac_tb.format_exc())',
     ].join('\n');
     const result = await this.client.callTool('execute_blender_code', { code: wrapped });
-    return result?.content?.map((c) => c.text ?? '').join('') ?? result;
+    const output = String(result?.content?.map((c) => c.text ?? '').join('') ?? result);
+    if (output.includes('GAC-EXEC-ERROR:') || output.includes('Error executing code:')
+      || output.includes('Could not connect to Blender')) {
+      throw new BlenderError(`Blender execute_blender_code failed: ${output.trim()}`);
+    }
+    return output;
   }
 
   /** Convenience: import a model file into the scene (data-API scene reset). */
@@ -145,7 +150,11 @@ export class BlenderSession {
         : `bpy.ops.wm.obj_import(filepath=${JSON.stringify(path)})`,
       'print("imported", len(bpy.data.objects), "objects", len(bpy.data.actions), "actions")',
     ].join('\n');
-    return this.execute(code);
+    const output = await this.execute(code);
+    if (!output.includes('imported ')) {
+      throw new BlenderError(`Blender did not confirm import of ${path}: ${output.trim() || 'empty answer'}`);
+    }
+    return output;
   }
 
   /** Convenience: export the whole scene as GLB. Verifies the file landed. */
@@ -155,7 +164,10 @@ export class BlenderSession {
       `bpy.ops.export_scene.gltf(filepath=${JSON.stringify(path)}, export_format='GLB')`,
       'print("exported", ' + JSON.stringify(path) + ')',
     ].join('\n');
-    await this.execute(code);
+    const output = await this.execute(code);
+    if (!output.includes('exported ')) {
+      throw new BlenderError(`Blender did not confirm export to ${path}: ${output.trim() || 'empty answer'}`);
+    }
     const { stat } = await import('node:fs/promises');
     try {
       const info = await stat(path);

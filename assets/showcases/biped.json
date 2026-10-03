@@ -1,0 +1,46 @@
+{
+  "rig": "BipedRig",
+  "frames": [1, 49],
+  "materials": [
+    { "name": "Tunic", "color": [0.16, 0.32, 0.56, 1], "metallic": 0, "roughness": 0.8 },
+    { "name": "Skin", "color": [0.68, 0.42, 0.28, 1], "metallic": 0, "roughness": 0.9 },
+    { "name": "Boots", "color": [0.12, 0.11, 0.09, 1], "metallic": 0, "roughness": 0.85 }
+  ],
+  "parts": [
+    { "name": "Torso", "shape": "ico", "location": [0, 0, 1.35], "scale": [0.45, 0.28, 0.62], "subdivisions": 1, "material": "Tunic", "bone": "torso" },
+    { "name": "Head", "shape": "ico", "location": [0, 0, 2.1], "scale": [0.27, 0.26, 0.3], "subdivisions": 1, "material": "Skin", "bone": "head" },
+    { "name": "Arm.L", "shape": "cone", "start": [0.4, 0, 1.72], "end": [0.72, 0, 0.85], "radius_start": 0.18, "radius_end": 0.11, "vertices": 8, "material": "Skin", "bone": "arm.L" },
+    { "name": "Arm.R", "shape": "cone", "start": [-0.4, 0, 1.72], "end": [-0.72, 0, 0.85], "radius_start": 0.18, "radius_end": 0.11, "vertices": 8, "material": "Skin", "bone": "arm.R" },
+    { "name": "Leg.L", "shape": "cone", "start": [0.22, 0, 0.94], "end": [0.26, 0, 0.12], "radius_start": 0.2, "radius_end": 0.13, "vertices": 8, "material": "Boots", "bone": "leg.L" },
+    { "name": "Leg.R", "shape": "cone", "start": [-0.22, 0, 0.94], "end": [-0.26, 0, 0.12], "radius_start": 0.2, "radius_end": 0.13, "vertices": 8, "material": "Boots", "bone": "leg.R" }
+  ],
+  "bones": [
+    { "name": "torso", "head": [0, 0, 0.9], "tail": [0, 0, 1.8] },
+    { "name": "head", "head": [0, 0, 1.8], "tail": [0, 0, 2.25], "parent": "torso" },
+    { "name": "arm.L", "head": [0.4, 0, 1.72], "tail": [0.72, 0, 0.85], "parent": "torso" },
+    { "name": "arm.R", "head": [-0.4, 0, 1.72], "tail": [-0.72, 0, 0.85], "parent": "torso" },
+    { "name": "leg.L", "head": [0.22, 0, 0.94], "tail": [0.26, 0, 0.12], "parent": "torso" },
+    { "name": "leg.R", "head": [-0.22, 0, 0.94], "tail": [-0.26, 0, 0.12], "parent": "torso" }
+  ],
+  "active": "walk",
+  "actions": [
+    {
+      "name": "walk",
+      "keyframes": [
+        { "frame": 1, "bones": { "arm.L": { "rotation": [0.45, 0, 0] }, "arm.R": { "rotation": [-0.45, 0, 0] }, "leg.L": { "rotation": [-0.4, 0, 0] }, "leg.R": { "rotation": [0.4, 0, 0] } } },
+        { "frame": 7, "root": { "location": [0, 0, 0.08] }, "bones": { "arm.L": { "rotation": [0, 0, 0] }, "arm.R": { "rotation": [0, 0, 0] }, "leg.L": { "rotation": [0, 0, 0] }, "leg.R": { "rotation": [0, 0, 0] } } },
+        { "frame": 13, "bones": { "arm.L": { "rotation": [-0.45, 0, 0] }, "arm.R": { "rotation": [0.45, 0, 0] }, "leg.L": { "rotation": [0.4, 0, 0] }, "leg.R": { "rotation": [-0.4, 0, 0] } } },
+        { "frame": 19, "root": { "location": [0, 0, 0.08] }, "bones": { "arm.L": { "rotation": [0, 0, 0] }, "arm.R": { "rotation": [0, 0, 0] }, "leg.L": { "rotation": [0, 0, 0] }, "leg.R": { "rotation": [0, 0, 0] } } },
+        { "frame": 25, "bones": { "arm.L": { "rotation": [0.45, 0, 0] }, "arm.R": { "rotation": [-0.45, 0, 0] }, "leg.L": { "rotation": [-0.4, 0, 0] }, "leg.R": { "rotation": [0.4, 0, 0] } } }
+      ]
+    },
+    {
+      "name": "idle",
+      "keyframes": [
+        { "frame": 1, "bones": { "head": { "rotation": [-0.06, 0, 0] }, "arm.L": { "rotation": [0, 0, -0.03] } } },
+        { "frame": 13, "bones": { "head": { "rotation": [0.06, 0, 0] }, "arm.L": { "rotation": [0, 0, 0.03] } } },
+        { "frame": 25, "bones": { "head": { "rotation": [-0.06, 0, 0] }, "arm.L": { "rotation": [0, 0, -0.03] } } }
+      ]
+    }
+  ]
+}

@@ -62,6 +62,16 @@ export async function loadPipelineConfig(path, { skarbiecOptions } = {}) {
   return resolveConfigSecrets(await readPipelineConfig(path), skarbiecOptions ?? {});
 }
 
+/** Only an absent default file is optional; explicit or malformed config fails. */
+export async function loadOptionalPipelineConfig(path, implicitDefault) {
+  try {
+    return await loadPipelineConfig(path);
+  } catch (error) {
+    if (implicitDefault && error.code === 'ENOENT') return {};
+    throw error;
+  }
+}
+
 /**
  * Resolve every reference in a pipeline config and answer the config as it
  * may be printed: each value that came from a reference reads

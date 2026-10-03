@@ -13,13 +13,13 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { checkPipelineConfig, loadPipelineConfig } from './config.js';
+import { checkPipelineConfig, loadOptionalPipelineConfig, loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './show/text2game.js';
 import { runDoctor } from './host/doctor.js';
 import { provisionBlender } from './host/setup.js';
 import { verifyAsset } from './gate/verify.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
-import { renderAnimationPreview } from './sculpt/preview.js';
+import { runPreviewCommand } from './preview-command.js';
 import { animatePreset } from './sculpt/animate.js';
 import { buildShowcase } from './sculpt/showcase.js';
 import { DeclarationError, availability } from './rigs/declared.js';
@@ -62,12 +62,7 @@ async function main() {
       return;
     }
     case 'onboarding': {
-      let config = {};
-      try {
-        config = await loadPipelineConfig(configPath);
-      } catch {
-        // Configuration is optional for local import; the built-in gate applies.
-      }
+      const config = await loadOptionalPipelineConfig(configPath, options.config === undefined);
       const report = await runOnboarding({
         reset: Boolean(options.reset),
         asset: options.asset,
@@ -81,13 +76,8 @@ async function main() {
     }
     case 'import': {
       const source = positional[0];
-      let config = {};
-      try {
-        config = await loadPipelineConfig(configPath);
-      } catch {
-        // Configuration is optional for local import; the built-in gate applies.
-      }
-      const report = await importAsset(source, { name: options.name, config });
+      const config = await loadOptionalPipelineConfig(configPath, options.config === undefined);
+      const report = await importAsset(source, { name: options.name, variantOf: options['variant-of'], config });
       if (report.status === 'imported' || report.status === 'unchanged') {
         await recordAssetImported(report);
       } else {
@@ -155,12 +145,7 @@ async function main() {
         process.exitCode = 2;
         return;
       }
-      let config = {};
-      try {
-        config = await loadPipelineConfig(configPath);
-      } catch {
-        // config is optional for verify — defaults kick in without it
-      }
+      const config = await loadOptionalPipelineConfig(configPath, options.config === undefined);
       const report = await verifyAsset(file, config);
       print(report);
       if (!report.ok) process.exitCode = 1;
@@ -199,13 +184,8 @@ async function main() {
         process.exitCode = 2;
         return;
       }
-      let config = {};
-      try {
-        config = await loadPipelineConfig(configPath);
-      } catch {
-        // config optional — blender.mcp defaults apply without it
-      }
-      const output = options.out ?? `assets/models/${asset}-showcase.glb`;
+      const config = await loadOptionalPipelineConfig(configPath, options.config === undefined);
+      const output = options.out;
       const result = await buildShowcase({
         asset,
         outputPath: output,
@@ -221,12 +201,7 @@ async function main() {
         process.exitCode = 2;
         return;
       }
-      let config = {};
-      try {
-        config = await loadPipelineConfig(configPath);
-      } catch {
-        // config optional — blender.mcp defaults apply without it
-      }
+      const config = await loadOptionalPipelineConfig(configPath, options.config === undefined);
       if (!options.preset || options.preset === true) {
         console.error(`error: animate requires --preset <name>; ${await availability('preset')}`);
         process.exitCode = 2;
@@ -242,28 +217,15 @@ async function main() {
       print(result);
       return;
     }
-    case 'preview-anim': {
+    case 'preview-anim':
+    case 'preview-scene': {
       const file = positional[0] ?? await activeAssetPath();
       if (!file) {
-        console.error('error: preview-anim requires a .glb path or an active imported asset');
+        console.error(`error: ${command} requires a .glb path or an active imported asset`);
         process.exitCode = 2;
         return;
       }
-      let config = {};
-      try {
-        config = await loadPipelineConfig(configPath);
-      } catch {
-        // config optional — blender.mcp defaults apply without it
-      }
-      const result = await renderAnimationPreview({
-        glbPath: file,
-        outPath: options.out,
-        clip: options.clip,
-        frames: options.frames ? Number(options.frames) : undefined,
-        fps: options.fps ? Number(options.fps) : undefined,
-        sessionOptions: config.blender?.mcp,
-      });
-      print(result);
+      print(await runPreviewCommand(command, file, options, configPath));
       return;
     }
     case 'help':

@@ -6,16 +6,23 @@
 // bone-parented to a compact armature, and its keyed actions, built by the one
 // interpreter in ../rigs/interpreter.js.
 
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { BlenderSession } from '../gate/blender.js';
 import { verifyAsset } from '../gate/verify.js';
 import { load } from '../rigs/declared.js';
+import { workspaceRoot } from '../workspace/store.js';
 import { showcaseProgram } from '../rigs/interpreter.js';
 
 export class ShowcaseError extends Error {}
 
 export async function buildShowcase({ outputPath, asset, sessionOptions } = {}) {
-  if (!outputPath) throw new ShowcaseError('outputPath is required');
   const spec = await load('showcase', asset);
+  if (!outputPath) {
+    const directory = join(workspaceRoot(), 'outputs');
+    await mkdir(directory, { recursive: true });
+    outputPath = join(directory, `${asset}-showcase.glb`);
+  }
   const session = await BlenderSession.start(sessionOptions ?? {});
   try {
     await session.execute(showcaseProgram(spec));

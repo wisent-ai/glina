@@ -1,0 +1,31 @@
+{
+  "required_bones": [],
+  "frames": [1, 49],
+  "active": "idle",
+  "actions": [
+    {
+      "name": "idle",
+      "keyframes": [
+        { "frame": 1, "root": { "location": [0, 0, 0], "rotation": [0, 0, -0.03] } },
+        { "frame": 13, "root": { "location": [0, 0, 0.08], "rotation": [0, 0, 0.03] } },
+        { "frame": 25, "root": { "location": [0, 0, 0], "rotation": [0, 0, -0.03] } }
+      ]
+    },
+    {
+      "name": "travel",
+      "keyframes": [
+        { "frame": 1, "root": { "location": [0, -0.25, 0], "rotation": [0.05, 0, -0.08] } },
+        { "frame": 7, "root": { "location": [0, 0, 0.12], "rotation": [-0.05, 0, 0.08] } },
+        { "frame": 13, "root": { "location": [0, 0.25, 0], "rotation": [0.05, 0, -0.08] } }
+      ]
+    },
+    {
+      "name": "attack",
+      "keyframes": [
+        { "frame": 1, "root": { "location": [0, 0, 0], "rotation": [0, 0, -0.15] } },
+        { "frame": 6, "root": { "location": [0, 0.3, 0.04], "rotation": [0.25, 0, 0.2] } },
+        { "frame": 12, "root": { "location": [0, 0, 0], "rotation": [0, 0, -0.15] } }
+      ]
+    }
+  ]
+}
