@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { migrateLegacy } from '../../pipeline/rigs/declared.js';
 
 const root = resolve(import.meta.dirname, '../..');
 const build = join(root, 'build', 'tests');
@@ -59,5 +60,36 @@ test('CLI keeps custom declarations in user data and protects shipped declaratio
     }
   } finally {
     await rm(data, { recursive: true, force: true });
+  }
+});
+
+test('legacy package declarations move without overwriting user data', async () => {
+  await mkdir(build, { recursive: true });
+  const fixture = await mkdtemp(join(build, 'legacy-declarations-'));
+  const priorHome = process.env.XDG_DATA_HOME;
+  process.env.XDG_DATA_HOME = join(fixture, 'home');
+  try {
+    const oldDirectory = join(fixture, 'package', 'assets', 'showcases');
+    await mkdir(oldDirectory, { recursive: true });
+    const declaration = await readFile(join(root, 'assets', 'showcases', 'biped.json'));
+    const legacy = join(oldDirectory, 'custom.json');
+    const shipped = join(oldDirectory, 'biped.json');
+    const target = join(fixture, 'home', 'glina', 'showcases', 'custom.json');
+    await writeFile(legacy, declaration);
+    await writeFile(shipped, declaration);
+    await migrateLegacy('showcase', join(fixture, 'package'));
+    assert.ok(!existsSync(legacy));
+    assert.deepEqual(await readFile(target), declaration);
+    assert.ok(existsSync(shipped));
+
+    await writeFile(legacy, declaration);
+    await writeFile(target, '{"different":true}');
+    await assert.rejects(migrateLegacy('showcase', join(fixture, 'package')), /already holds different bytes/);
+    assert.ok(existsSync(legacy));
+    assert.equal((await readFile(target, 'utf8')), '{"different":true}');
+  } finally {
+    if (priorHome === undefined) delete process.env.XDG_DATA_HOME;
+    else process.env.XDG_DATA_HOME = priorHome;
+    await rm(fixture, { recursive: true, force: true });
   }
 });
