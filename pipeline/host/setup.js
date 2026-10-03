@@ -2,13 +2,11 @@
 //
 // Installs + verifies everything the Blender MCP mode needs:
 //   1. Blender itself        (brew cask on macOS, apt/snap on Linux)
-//   2. uv / uvx              (brew/pip — runs the blender-mcp server)
+//   2. uv / uvx              (brew/installer — runs the blender-mcp server)
 //   3. blender-mcp package   (resolved through uvx)
-//   4. a live MCP handshake  (health check via BlenderSession)
 //
+// `glina setup [--check] [--dry-run]` is the only command surface.
 // Idempotent: anything already present is verified, not reinstalled.
-// Run it directly:  node pipeline/setup.js [--check]
-//   --check   only verify (exit 0 when healthy), never install.
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -108,17 +106,3 @@ export async function provisionBlender({ dryRun = false, checkOnly = false, log 
   return { healthy: checkOnly ? report.every((r) => r.status === 'present' || r.step === 'blender-mcp') : healthy, steps: report };
 }
 
-// CLI entry: node pipeline/setup.js [--check] [--dry-run]
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const args = process.argv.slice(2);
-  const checkOnly = args.includes('--check');
-  const dryRun = args.includes('--dry-run');
-  try {
-    const report = await provisionBlender({ checkOnly, dryRun });
-    console.log(JSON.stringify(report, null, 2));
-    if (!report.healthy) process.exitCode = 1;
-  } catch (error) {
-    console.error(`setup failed: ${error.message}`);
-    process.exitCode = 1;
-  }
-}

@@ -3,7 +3,7 @@
 // Same transport discipline as the Weles layer: the pipeline talks to a
 // Blender MCP server over stdio JSON-RPC (never hand-rolled sockets to
 // Blender, never a hand-managed Blender subprocess). The MCP server
-// bridges into Blender's own addon; `pipeline/setup.js` provisions both.
+// bridges into Blender's own addon; `glina setup` provisions its tools.
 //
 // Tool surface used (blender-mcp): get_scene_info, execute_blender_code.
 // Anything else (export, decimate, rig) is expressed as Blender Python
@@ -36,7 +36,7 @@ export function blenderMcpSpawn(config = {}) {
 export class BlenderSession {
   /**
    * Start a Blender MCP session.
-   * @param {object} options { command, args, uvx, uvxBin, timeoutMs }
+   * @param {object} options { command, args, uvx, uvxBin }
    */
   static async start(options = {}) {
     const spawn_ = blenderMcpSpawn(options);
@@ -50,7 +50,7 @@ export class BlenderSession {
     } catch (error) {
       throw new BlenderError(
         `blender MCP server failed to start (${spawn_.command} ${spawn_.args.join(' ')}): ${error.message}. ` +
-          `Run 'node pipeline/setup.js' to provision Blender + blender-mcp.`,
+          `Run 'glina setup' to provision Blender + blender-mcp.`,
         { cause: error },
       );
     }
