@@ -13,6 +13,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { isSkarbiecRef, resolveConfigSecrets, SkarbiecError } from './host/skarbiec.js';
+import { buildCompleter } from './sculpt/llm.js';
 
 const SECRET_KEY_PATTERN = /(token|secret|password|passwd|credential|cookie|api[_-]?key|private[_-]?key)/i;
 
@@ -81,7 +82,8 @@ export async function loadOptionalPipelineConfig(path, implicitDefault) {
  */
 export async function checkPipelineConfig(path, { skarbiecOptions } = {}) {
   const config = await readPipelineConfig(path);
-  await resolveConfigSecrets(config, skarbiecOptions ?? {});
+  const resolved = await resolveConfigSecrets(config, skarbiecOptions ?? {});
+  buildCompleter(resolved.models);
   return hideReferences(config);
 }
 

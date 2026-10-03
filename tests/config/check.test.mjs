@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { test } from 'node:test';
+
+const root = resolve(import.meta.dirname, '../..');
+
+test('check-config resolves supported model credentials and refuses unsupported backends', async () => {
+  const build = join(root, 'build', 'tests');
+  await mkdir(build, { recursive: true });
+  const directory = await mkdtemp(join(build, 'config-'));
+  const configPath = join(directory, 'pipeline.config.json');
+  const credentialsPath = join(directory, 'credentials.json');
+  const run = () => spawnSync(process.execPath, ['pipeline/cli.js', 'check-config', '--config', configPath], {
+    cwd: root,
+    env: { ...process.env, GLINA_CREDENTIALS_FILE: credentialsPath },
+    encoding: 'utf8',
+  });
+  try {
+    await writeFile(credentialsPath, JSON.stringify({ test: { key: 'signing-value', bearer: 'access-value', agent_id: 'test-agent' } }), { mode: 0o600 });
+    const models = { brama: {
+      url: 'https://brama.wisent.com',
+      key: 'skarbiec://test/key',
+      bearer: 'skarbiec://test/bearer',
+      agent_id: 'skarbiec://test/agent_id',
+      model: 'any',
+    } };
+    await writeFile(configPath, JSON.stringify({ models }));
+    const accepted = run();
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(JSON.parse(accepted.stdout).models.brama.bearer, '<resolved: ok>');
+    assert.deepEqual(JSON.parse(await readFile(configPath, 'utf8')).models, models);
+
+    await writeFile(configPath, JSON.stringify({ models: { backend: 'openrouter', openrouter: {} } }));
+    const refused = run();
+    assert.equal(refused.status, 1, refused.stdout);
+    assert.match(refused.stderr, /models\.backend|models\.openrouter/);
+    assert.equal(refused.stdout, '');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
