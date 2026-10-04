@@ -114,7 +114,15 @@ export async function sculptWithLlm(job, config, deps = {}) {
   const complete = deps.complete ?? buildCompleter(config.models ?? {});
   const sessionFactory = deps.sessionFactory ?? ((opts) => BlenderSession.start(opts));
   const verify = deps.verify ?? verifyAsset;
-  const maxRounds = job.maxRounds ?? config.llm?.maxRounds ?? 12;
+  // How many rounds a sculpt may take is the operator's decision: the
+  // request's --rounds, or llm.maxRounds in the pipeline config.
+  const maxRounds = job.maxRounds ?? config.llm?.maxRounds;
+  if (!Number.isInteger(maxRounds) || maxRounds < 1) {
+    throw new SculptError(
+      'sculpt needs a round cap: pass --rounds <n> or set llm.maxRounds in the pipeline config',
+      { round: 0 },
+    );
+  }
 
   const session = await sessionFactory(config.blender?.mcp ?? {});
   const transcript = [];

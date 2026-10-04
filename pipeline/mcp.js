@@ -65,7 +65,7 @@ const TOOLS = [
         prompt: { type: 'string', description: 'What to build, e.g. "gothic dwarven tower, low-poly"' },
         out_dir: { type: 'string' },
         filename: { type: 'string' },
-        max_rounds: { type: 'number', description: 'Max LLM iterations (default 12)' },
+        max_rounds: { type: 'number', description: 'Max LLM iterations; required unless the pipeline config sets llm.maxRounds' },
         config: { type: 'string', description: 'Path to pipeline.config.json' },
       },
       required: ['prompt'],
