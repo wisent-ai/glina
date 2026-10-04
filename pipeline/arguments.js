@@ -59,7 +59,7 @@ export const COMMANDS = [
   { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the Weles browser layer' },
   { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'LLM (Opus) iteratively builds the model in Blender' },
   { name: 'preview-anim', usage: 'preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif] [--config path]', help: 'render an animated GIF of one clip through Blender' },
-  { name: 'preview-scene', usage: 'preview-scene [file.glb] [--out f.png] [--config path]', help: 'render the asset on neutral ground in a framed Blender scene' },
+  { name: 'preview-scene', usage: 'preview-scene [file.glb] [--out f.png] [--size px] [--config path]', help: 'render the asset on neutral ground in a framed Blender scene' },
   { name: 'animate', usage: 'animate [file.glb] --preset <name> [--out animated.glb] [--config path]', help: "apply a declared preset's visibly moving actions" },
   { name: 'showcase', usage: 'showcase <asset> [--out file.glb] [--config path]', help: 'build a declared animated reference asset' },
   { name: 'showcases', usage: 'showcases [list | add <name> <file.json> | remove <name>]', help: 'manage bundled and user showcase declarations' },

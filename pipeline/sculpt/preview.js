@@ -195,8 +195,15 @@ export async function renderAnimationPreview({
   }
 }
 
-/** Render an accepted GLB on a neutral ground with a framed camera and light. */
-export async function renderScenePreview({ glbPath, outPath, sessionOptions } = {}) {
+/**
+ * Render an accepted GLB on a neutral ground with a framed camera and light.
+ * `size` is the square image edge in pixels the caller asked for; without it
+ * the image keeps the resolution of the Blender scene it is rendered in.
+ */
+export async function renderScenePreview({ glbPath, outPath, size, sessionOptions } = {}) {
+  if (size !== undefined && !(Number.isInteger(size) && size > 0)) {
+    throw new PreviewError(`--size must be a whole number of pixels above zero, got ${size}`);
+  }
   if (!glbPath) throw new PreviewError('glbPath is required');
   let finalOut = outPath;
   if (!finalOut) {
@@ -251,13 +258,17 @@ export async function renderScenePreview({ glbPath, outPath, sessionOptions } = 
       'if scene.world is None: scene.world = bpy.data.worlds.new("Glina preview world")',
       'scene.world.color = (0.35, 0.35, 0.35)',
       'scene.render.engine = "BLENDER_EEVEE_NEXT" if hasattr(bpy.types, "BLENDER_EEVEE_NEXT") else "BLENDER_EEVEE"',
-      'scene.render.resolution_x = 768',
-      'scene.render.resolution_y = 768',
-      'scene.render.resolution_percentage = 100',
+      ...(size === undefined
+        ? []
+        : [
+            `scene.render.resolution_x = scene.render.resolution_y = ${size}`,
+            'scene.render.resolution_percentage = 100',
+          ]),
       'scene.render.image_settings.file_format = "PNG"',
       `scene.render.filepath = ${JSON.stringify(temporary)}`,
       'bpy.ops.render.render(write_still=True)',
       'print("rendered-scene", os.path.getsize(scene.render.filepath))',
+      'print("scene-size", scene.render.resolution_x * scene.render.resolution_percentage // 100, scene.render.resolution_y * scene.render.resolution_percentage // 100)',
     ].join('\n');
     const result = String(await session.execute(code));
     let rendered;
@@ -270,7 +281,15 @@ export async function renderScenePreview({ glbPath, outPath, sessionOptions } = 
       throw new PreviewError(`Blender scene render failed: ${result.slice(-400)}`);
     }
     await rename(temporary, finalOut);
-    return { outPath: finalOut, source: glbPath, bytes: rendered.size, scene: 'neutral-ground' };
+    const dimensions = /scene-size (\d+) (\d+)/.exec(result);
+    return {
+      outPath: finalOut,
+      source: glbPath,
+      bytes: rendered.size,
+      width: dimensions ? Number(dimensions[1]) : null,
+      height: dimensions ? Number(dimensions[2]) : null,
+      scene: 'neutral-ground',
+    };
   } finally {
     await session?.close().catch(() => {});
     await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {});

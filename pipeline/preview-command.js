@@ -7,7 +7,12 @@ export async function runPreviewCommand(command, file, options, configPath) {
   const config = await loadOptionalPipelineConfig(configPath, options.config === undefined);
   const sessionOptions = config.blender?.mcp;
   if (command === 'preview-scene') {
-    return renderScenePreview({ glbPath: file, outPath: options.out, sessionOptions });
+    return renderScenePreview({
+      glbPath: file,
+      outPath: options.out,
+      size: options.size === undefined ? undefined : Number(options.size),
+      sessionOptions,
+    });
   }
   return renderAnimationPreview({
     glbPath: file,
