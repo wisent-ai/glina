@@ -20,10 +20,10 @@ test('check-config resolves supported model credentials and refuses unsupported 
   try {
     await writeFile(credentialsPath, JSON.stringify({ test: { key: 'signing-value', bearer: 'access-value', agent_id: 'test-agent' } }), { mode: 0o600 });
     const models = { brama: {
-      url: 'https://brama.wisent.com',
-      key: 'skarbiec://test/key',
-      bearer: 'skarbiec://test/bearer',
-      agent_id: 'skarbiec://test/agent_id',
+      url: 'https://brama.example',
+      key: 'role://test/key',
+      bearer: 'role://test/bearer',
+      agent_id: 'role://test/agent_id',
       model: 'any',
     } };
     await writeFile(configPath, JSON.stringify({ models }));

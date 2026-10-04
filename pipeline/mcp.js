@@ -49,7 +49,7 @@ const TOOLS = [
   {
     name: 'glina_check_config',
     description:
-      'Validate pipeline.config.json and resolve all skarbiec:// references against the vault (no browser, no Blender). Returns the config with credentials redacted.',
+      'Validate pipeline.config.json and resolve all role:// references against the vault (no browser, no Blender). Returns the config with credentials redacted.',
     inputSchema: {
       type: 'object',
       properties: { config: { type: 'string', description: 'Path to pipeline.config.json' } },

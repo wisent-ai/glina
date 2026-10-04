@@ -6,8 +6,8 @@
 //   check-config [--config <path>]     validate + resolve the config (no browser)
 //   doctor [--config <path>]           check the config, the Blender bridge and the browser layer
 //
-// Credentials: skarbiec:// refs in the config, answered by Skarbiec or by the
-//              owner-only GLINA_CREDENTIALS_FILE on a machine without it.
+// Credentials: role:// refs in the config, answered by `stado credentials get
+//              --role` or by the owner-only GLINA_CREDENTIALS_FILE without Stado.
 // Browser:     driven ONLY through the Weles MCP server.
 
 import { realpathSync } from 'node:fs';
@@ -121,7 +121,7 @@ async function main() {
     }
     case 'export-config': {
       // Submit-time secret resolution for REMOTE runs (stado): resolves all
-      // skarbiec:// refs locally (the vault never leaves this host) and
+      // role:// refs locally (the vault never leaves this host) and
       // writes a mode-0600 resolved config the worker consumes directly —
       // the same owner-only-env-file pattern as `skarbiec resolve --emit`.
       // Nothing secret is printed.

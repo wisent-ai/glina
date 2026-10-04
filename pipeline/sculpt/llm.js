@@ -6,14 +6,20 @@
 //   models.openai_compatible  any provider the user runs or rents, for a
 //                             user without Brama: url, bearer and model,
 //                             sent unsigned.
-// Credentials come from the pipeline config like everything else (skarbiec://
+// Credentials come from the pipeline config like everything else (role://
 // references, or the owner-only credentials file that answers them without
-// Skarbiec) — never from env. Exactly one backend is declared.
+// Stado) — never from env. Exactly one backend is declared. Brama's address
+// is models.brama.url when the config names one, otherwise the address Stado's
+// service directory wrote for this machine (~/.stado/forwards/brama.local);
+// the model is always the alias the config names.
 //
 // The transport is one function: complete({ system, messages, maxTokens })
 // → text. Injected as a seam in tests.
 
 import { createHash, createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 export class LlmError extends Error {
   constructor(message, { status, cause } = {}) {
@@ -48,8 +54,9 @@ export function buildCompleter(models = {}, { fetchImpl } = {}) {
     requireFields('openai_compatible', cfg, ['url', 'bearer', 'model']);
     return completer(cfg, fetch_, 'the model provider', () => ({}));
   }
-  const cfg = models.brama;
-  requireFields('brama', cfg, ['url', 'key', 'bearer', 'agent_id']);
+  const declaredBrama = models.brama;
+  requireFields('brama', declaredBrama, ['key', 'bearer', 'agent_id', 'model']);
+  const cfg = { ...declaredBrama, url: bramaUrl(declaredBrama) };
   // x-agent-id + x-agent-timestamp + x-agent-signature =
   // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>"),
   // mirroring weles' signedRouterHeaders.
@@ -69,9 +76,30 @@ function requireFields(backend, cfg, fields) {
   if (missing.length > 0) {
     throw new LlmError(
       `models.${backend} is not configured: models.${backend}.${missing.join(`, models.${backend}.`)} missing ` +
-        '(skarbiec:// references in pipeline.config.json)',
+        '(role:// references for secrets, the model alias as text, in pipeline.config.json)',
     );
   }
+}
+
+/** models.brama.url, or the address Stado's service directory published for this machine. */
+function bramaUrl(cfg) {
+  if (cfg.url) return cfg.url;
+  const marker = join(homedir(), '.stado', 'forwards', 'brama.local');
+  let published = '';
+  try {
+    published = readFileSync(marker, 'utf8').split('\n')[0].trim();
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw new LlmError(`cannot read ${marker}: ${error.message}`, { cause: error });
+    }
+  }
+  if (!published) {
+    throw new LlmError(
+      `no Brama address: models.brama.url is unset and Stado's service directory has written no ${marker} ` +
+        'for this machine (run `stado service directory publish`, or set models.brama.url)',
+    );
+  }
+  return published;
 }
 
 /** One OpenAI-compatible chat completion per call; `sign` adds the backend's own headers. */
@@ -79,7 +107,7 @@ function completer(cfg, fetch_, label, sign) {
   const url = `${cfg.url.replace(/\/+$/, '')}/v1/chat/completions`;
   return async function complete({ system, messages, maxTokens = 4096 }) {
     const bodyStr = JSON.stringify({
-      model: cfg.model ?? 'any',
+      model: cfg.model,
       max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
     });

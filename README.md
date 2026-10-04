@@ -17,20 +17,25 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
 
 ## Hard rules (never bypass)
 
-1. **Secrets**: [Skarbiec](https://github.com/wisent-ai/skarbiec), or on a
-   machine without it the owner-only JSON file `GLINA_CREDENTIALS_FILE` names
-   (item → field → value, mode 600; a file others can read is refused). Config
-   holds `skarbiec://<item>/<field>` refs either way; the loader refuses inline
-   credential fields. `glina check-config` validates the selected model backend
-   and prints references as `<resolved: ok>`; it refuses resolved handoff files
-   because they contain plaintext secrets.
+1. **Secrets**: by role. Config holds `role://<role>/<field>` references — the
+   role the vault item plays (its tag `stado:role:<role>`) and the field — and
+   never an item name. Each is read with `stado credentials get --role ROLE
+   --field FIELD` (`STADO_BIN` names another executable), or on a machine
+   without Stado from the owner-only JSON file `GLINA_CREDENTIALS_FILE` names
+   (role → field → value, mode 600; a file others can read is refused). The
+   loader refuses inline credential fields. `glina check-config` validates the
+   selected model backend and prints references as `<resolved: ok>`; it
+   refuses resolved handoff files because they contain plaintext secrets.
 2. **Browser**: only via the Weles MCP stdio server (`weles-mcp`), never a
    local Chromium/profile.
 3. **Blender**: only via the MCP for Blender server (`uvx mcp-for-blender`
    default), never hand-rolled sockets.
 4. **Model access**: one backend under `models`. `models.brama` is
    [Brama](https://github.com/wisent-ai/brama), the org model router, with
-   `url`, `key`, `bearer` and `agent_id`; requests are signed. Without Brama,
+   `key`, `bearer`, `agent_id` and the alias in `model`; requests are signed.
+   Its address is `url` when given, otherwise the one Stado's service
+   directory wrote for this machine in `~/.stado/forwards/brama.local`; with
+   neither the run is refused naming both. Without Brama,
    `models.openai_compatible` names any OpenAI-compatible provider with `url`,
    `bearer` and `model`; requests go unsigned. Any other key, or both at
    once, is refused by name.

@@ -4,8 +4,8 @@
     "headless": true
   },
   "credentials": {
-    "username": "skarbiec://TEXT2GAME_ACCOUNT/login_email",
-    "password": "skarbiec://TEXT2GAME_ACCOUNT/login_password"
+    "username": "role://text2game-account/login_email",
+    "password": "role://text2game-account/login_password"
   },
   "studio": {
     "loginUrl": "https://hunyuan3d.tencent.com/login",
@@ -23,12 +23,11 @@
   },
   "models": {
     "brama": {
-      "url": "https://brama.wisent.com",
-      "key": "skarbiec://agent:wisent-app/value",
-      "bearer": "skarbiec://agent:wisent-app/bearer",
+      "key": "role://glina-agent-auth/agent_auth_secret",
+      "bearer": "role://glina-model-router/token",
       "model": "any",
-      "_comment": "Brama (org model router). Without Brama replace models.brama with models.openai_compatible: url, bearer and model of any OpenAI-compatible provider.",
-      "agent_id": "skarbiec://WISENT_APP_AGENT_ID/value"
+      "_comment": "Brama (org model router). Its address comes from Stado's service directory; set url only to override it. Without Brama replace models.brama with models.openai_compatible: url, bearer and model of any OpenAI-compatible provider.",
+      "agent_id": "role://glina-agent-auth/id"
     }
   },
   "llm": {

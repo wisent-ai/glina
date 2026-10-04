@@ -81,8 +81,8 @@ function rows(commands) {
   );
 }
 
-const BOUNDARIES = `credentials come from skarbiec:// references in the config, answered by
-Skarbiec or, without it, by the owner-only file GLINA_CREDENTIALS_FILE names;
+const BOUNDARIES = `credentials come from role:// references in the config, answered by
+stado credentials get --role or, without Stado, by the owner-only file GLINA_CREDENTIALS_FILE names;
 models come from models.brama or, without Brama, models.openai_compatible;
 browser automation goes only through the Weles MCP server;
 Blender work goes only through the Blender MCP server.`;

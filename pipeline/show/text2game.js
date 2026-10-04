@@ -37,7 +37,7 @@ async function step(name, fn) {
  *
  * @param {object} job        { prompt, race?, outDir, filename? }
  * @param {object} config     resolved pipeline config (secrets already
- *                            expanded from skarbiec:// by config.js)
+ *                            expanded from role:// by config.js)
  * @param {object} [deps]     test seams: { sessionFactory, download }
  */
 export async function runTextToGameJob(job, config, deps = {}) {
