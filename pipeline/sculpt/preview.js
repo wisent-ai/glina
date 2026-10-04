@@ -25,8 +25,9 @@ function runBin(bin, args) {
   });
 }
 
-/** Build a looping GIF from frame_###.png files in framesDir. */
-export async function assembleGif(framesDir, outPath, fps = 10) {
+/** Build a looping GIF from frame_###.png files in framesDir, played at `fps`. */
+export async function assembleGif(framesDir, outPath, fps) {
+  if (!(Number(fps) > 0)) throw new PreviewError(`GIF playback rate must be above zero, got ${fps}`);
   const palette = join(framesDir, 'palette.png');
   // ImageIO exposes GIF delta rectangles as individual CGImages. Glina's
   // frame-driven player therefore needs every encoded frame to cover the full
@@ -54,7 +55,8 @@ export async function assembleGif(framesDir, outPath, fps = 10) {
     'from PIL import Image',
     `frames = sorted(glob.glob(os.path.join(${JSON.stringify(framesDir)}, "frame_*.png")))`,
     'assert frames, "no frames rendered"',
-    'imgs = [Image.open(f).convert("P", palette=Image.ADAPTIVE, colors=128) for f in frames]',
+    // 256 is the GIF format's palette size, the same ceiling ffmpeg's palettegen uses.
+    'imgs = [Image.open(f).convert("P", palette=Image.ADAPTIVE, colors=256) for f in frames]',
     `d, ms = ${JSON.stringify(outPath)}, ${Math.round(1000 / fps)}`,
     'imgs[0].save(d, save_all=True, append_images=imgs[1:], duration=ms, loop=0, optimize=False, disposal=2)',
     'print("gif-bytes", os.path.getsize(d))',
@@ -77,15 +79,19 @@ async function readdirSafeSize(p) {
 
 /**
  * Render an animated GIF preview of one clip of a GLB.
+ *
+ * Without `frames` every frame of the clip is rendered; without `fps` the GIF
+ * plays at the clip's own speed (the scene rate Blender imported it at,
+ * divided by the sampling step), so the preview moves as the asset does.
  * @param {object} opts { glbPath, outPath?, clip?, frames?, fps?, sessionOptions? }
- * @returns {Promise<{outPath, clip, frames, tool}>}
+ * @returns {Promise<{outPath, clip, frames, fps, tool}>}
  */
 export async function renderAnimationPreview({
   glbPath,
   outPath,
   clip,
-  frames = 24,
-  fps = 10,
+  frames,
+  fps,
   sessionOptions,
 } = {}) {
   if (!glbPath) throw new PreviewError('glbPath is required');
@@ -100,7 +106,7 @@ export async function renderAnimationPreview({
       'import bpy, os, math',
       `FRAMES_DIR = ${JSON.stringify(framesDir)}`,
       `WANT_CLIP = ${JSON.stringify(clip ?? '')}`,
-      'TARGET_FRAMES = ' + Number(frames),
+      'TARGET_FRAMES = ' + (frames === undefined ? 0 : Number(frames)),
       '',
       '# --- pick the action (named, else longest) ---',
       'actions = list(bpy.data.actions)',
@@ -124,7 +130,7 @@ export async function renderAnimationPreview({
       '# --- scene range over the action ---',
       'start, end = int(act.frame_range[0]), int(act.frame_range[1])',
       'if end <= start: end = start + 1',
-      'step = max(1, (end - start + 1) // TARGET_FRAMES)',
+      'step = max(1, (end - start + 1) // TARGET_FRAMES) if TARGET_FRAMES else 1',
       'scene = bpy.context.scene',
       "scene.render.engine = 'BLENDER_EEVEE_NEXT' if hasattr(bpy.types, 'BLENDER_EEVEE_NEXT') else 'BLENDER_EEVEE'",
       'scene.render.resolution_x = scene.render.resolution_y = 512',
@@ -159,23 +165,30 @@ export async function renderAnimationPreview({
       '',
       'n = 0',
       'f = start',
-      'while f <= end and n < TARGET_FRAMES:',
+      'while f <= end and (not TARGET_FRAMES or n < TARGET_FRAMES):',
       '    scene.frame_set(f)',
       "    scene.render.filepath = os.path.join(FRAMES_DIR, 'frame_%03d.png' % n)",
       '    bpy.ops.render.render(write_still=True)',
       '    n += 1',
       '    f += step',
       'print("rendered-frames", n, "clip", base(act))',
+      'print("clip-timing", scene.render.fps / scene.render.fps_base, step)',
     ].join('\n');
     const result = String(await session.execute(code));
     const rendered = await readdir(framesDir);
     if (!rendered.some((f) => f.startsWith('frame_'))) {
       throw new PreviewError(`Blender rendered no frames: ${result.slice(-400)}`);
     }
+    let playback = fps;
+    if (playback === undefined) {
+      const timing = /clip-timing ([0-9.]+) (\d+)/.exec(result);
+      if (!timing) throw new PreviewError(`Blender did not report the clip's timing: ${result.slice(-400)}`);
+      playback = Number(timing[1]) / Number(timing[2]);
+    }
     const finalOut =
       outPath ?? glbPath.replace(/\.glb$/i, '') + `-anim${clip ? `-${clip}` : ''}.gif`;
-    const { tool } = await assembleGif(framesDir, finalOut, fps);
-    return { outPath: finalOut, clip, frames: rendered.length, tool };
+    const { tool } = await assembleGif(framesDir, finalOut, playback);
+    return { outPath: finalOut, clip, frames: rendered.length, fps: playback, tool };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
     await session.close().catch(() => {});
