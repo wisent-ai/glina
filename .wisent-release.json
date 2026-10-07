@@ -10,7 +10,16 @@
   "platforms": {
     "npm-package": {
       "runner_platform": "linux-amd64",
-      "quality": [],
+      "quality": [
+        {
+          "name": "version-gate",
+          "argv": [
+            "stado", "release", "version-gate", "app-check",
+            "--package-json", "package.json", "--export-conditions", "import,node,default", "--js-exports",
+            "--command-array", "pipeline/arguments.js:COMMANDS", "--mcp-tools", "pipeline/mcp.js"
+          ]
+        }
+      ],
       "build": {
         "argv": ["stado", "product", "npm", "pack"]
       },
