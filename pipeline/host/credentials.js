@@ -40,7 +40,7 @@ function readThroughStado(role, field, { binary } = {}) {
   const bin = binary ?? nonSecretEnv('STADO_BIN') ?? 'stado';
   const args = ['credentials', 'get', '--role', role, '--field', field];
   return new Promise((resolve, reject) => {
-    execFile(bin, args, { maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(bin, args, { maxBuffer: Infinity }, (error, stdout, stderr) => {
       if (error) {
         // A Stado that cannot be started is answered with the way to run
         // without it; a running Stado's own refusal is passed on as said.

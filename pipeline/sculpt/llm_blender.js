@@ -21,9 +21,15 @@ export class SculptError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `You are a senior 3D technical artist driving Blender through bpy code.
+// The prompt names the gate's own triangle budget and clip count when the
+// pipeline config's `verify` section states them, so the model aims at what
+// the gate will check rather than at a number written into the prompt.
+function systemPrompt(verify) {
+  const budget = Number.isFinite(verify.triTarget) ? `, ~${verify.triTarget} triangle budget` : '';
+  const clips = Number.isInteger(verify.minAnimationClips) ? `at least ${verify.minAnimationClips} ` : '';
+  return `You are a senior 3D technical artist driving Blender through bpy code.
 You are building ONE game-ready character/prop model for a low-poly RTS game
-(visual style: Thronefall — chunky heroic proportions, flat-shaded, ~6000 triangle budget).
+(visual style: Thronefall — chunky heroic proportions, flat-shaded${budget}).
 
 IMPORTANT — execution environment constraints (violating these crashes the run):
 - Each code block executes in a FRESH namespace containing only "bpy".
@@ -48,7 +54,7 @@ Each reply MUST be a single JSON object (no prose around it):
 
 Rules:
 - Build with primitives + vertex-level detail; flat shading; assign material
-  COLORS (no texture files). Keep the final triangle count near 6000.
+  COLORS (no texture files).${budget ? ` Keep the final triangle count near ${verify.triTarget}.` : ''}
 - NEVER call bpy.ops.wm.read_factory_settings — it wipes the bridge's scene
   properties and kills the session. To start from an empty scene, remove
   data directly in your first step:
@@ -57,15 +63,16 @@ Rules:
 - Iterate in small steps: block out → refine → details → materials/colors.
 - ANIMATION — when the user message says animations are REQUIRED:
   build ONE Armature (single bone chain or simple skeleton), parent the
-  mesh to it with automatic weights, and create at least TWO named Actions
-  in bpy.data.actions: "idle" plus one characteristic motion ("roar",
-  "flap", "walk", "hover"...). Keyframe bone poses across a short range
-  (24–64 frames). bpy.data.actions persists between blocks, so you can
+  mesh to it with automatic weights, and create ${clips}named
+  Actions in bpy.data.actions: "idle" plus characteristic motions ("roar",
+  "flap", "walk", "hover"...). Keyframe bone poses across a short range of
+  frames. bpy.data.actions persists between blocks, so you can
   build the rig in one step and keyframe in later steps. The armature does
   not count toward the triangle budget.
 - When the model is complete, reply with done:true and empty code.
 - Never touch the filesystem except the provided INPUT/OUTPUT paths; never
   import external assets; no network access.`;
+}
 
 /** Build the loop's user messages transcript entry for one round. */
 function roundMessage(round, maxRounds, execResult, screenshot) {
@@ -123,6 +130,16 @@ export async function sculptWithLlm(job, config, deps = {}) {
       { round: 0 },
     );
   }
+  // The reply length a round may take is the config's too.
+  const maxTokens = job.maxTokens ?? config.llm?.maxTokens;
+  if (!Number.isInteger(maxTokens) || !(maxTokens >= Number.MIN_VALUE)) {
+    throw new SculptError('sculpt needs a reply length: set llm.maxTokens in the pipeline config', { round: 0 });
+  }
+  const verifyConfig = config.verify;
+  if (!verifyConfig) {
+    throw new SculptError('sculpt needs the pipeline config\'s verify section: the gate every sculpt ends in', { round: 0 });
+  }
+  const SYSTEM_PROMPT = systemPrompt(verifyConfig);
 
   const session = await sessionFactory(config.blender?.mcp ?? {});
   const transcript = [];
@@ -134,7 +151,7 @@ export async function sculptWithLlm(job, config, deps = {}) {
       content:
         `Build this asset: ${job.prompt}` +
         (requireAnimations
-          ? '\n\nHARD REQUIREMENT: the quality gate refuses static meshes. The final GLB must contain a rigged mesh (skin) and at least two named animation clips (bpy Actions), e.g. "idle" plus one characteristic motion.'
+          ? `\n\nHARD REQUIREMENT: the quality gate refuses static meshes. The final GLB must contain a rigged mesh (skin) and ${Number.isInteger(verifyConfig.minAnimationClips) ? `at least ${verifyConfig.minAnimationClips} ` : ''}named animation clips (bpy Actions), e.g. "idle" plus characteristic motions.`
           : ''),
     },
   ];
@@ -142,11 +159,10 @@ export async function sculptWithLlm(job, config, deps = {}) {
   try {
     const tools = await session.listTools().catch(() => []);
     let exported = false;
-    let consecutiveBridgeFailures = 0;
     let rounds = 0;
 
     for (let round = 1; round <= maxRounds; round += 1) {
-      const reply = await complete({ system: SYSTEM_PROMPT, messages, maxTokens: job.maxTokens ?? config.llm?.maxTokens ?? 8192 });
+      const reply = await complete({ system: SYSTEM_PROMPT, messages, maxTokens });
       transcript.push(reply.text);
       let step;
       try {
@@ -164,20 +180,18 @@ export async function sculptWithLlm(job, config, deps = {}) {
           execResult = String(await session.execute(step.code));
         } catch (error) {
           execResult = `ERROR: ${error.message}`;
-          consecutiveBridgeFailures += 1;
-          // The model cannot heal a dead bridge; probing through the LLM
-          // only burns rounds. Three consecutive transport failures end
-          // the run with the cause named.
-          if (consecutiveBridgeFailures >= 3) {
-            throw new SculptError(`Blender bridge is down after ${consecutiveBridgeFailures} consecutive failures: ${error.message}`, {
+          // A failed block is the model's to repair only while the bridge
+          // still answers: ask the bridge itself, and end the run with the
+          // cause named when it does not, instead of counting failures.
+          let probeError = null;
+          await session.listTools().catch((probe) => { probeError = probe; });
+          if (probeError) {
+            throw new SculptError(`Blender bridge is down: ${error.message}; the bridge then refused listTools too: ${probeError.message}`, {
               round,
               cause: error,
             });
           }
         }
-      }
-      if (execResult !== null && !String(execResult).startsWith('ERROR:')) {
-        consecutiveBridgeFailures = 0;
       }
 
       if (step.done === true) {

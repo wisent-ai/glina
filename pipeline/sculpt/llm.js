@@ -105,7 +105,8 @@ function bramaUrl(cfg) {
 /** One OpenAI-compatible chat completion per call; `sign` adds the backend's own headers. */
 function completer(cfg, fetch_, label, sign) {
   const url = `${cfg.url.replace(/\/+$/, '')}/v1/chat/completions`;
-  return async function complete({ system, messages, maxTokens = 4096 }) {
+  return async function complete({ system, messages, maxTokens }) {
+    if (!Number.isInteger(maxTokens)) throw new LlmError(`${label}: no reply length given: the caller states max_tokens`);
     const bodyStr = JSON.stringify({
       model: cfg.model,
       max_tokens: maxTokens,
@@ -200,5 +201,5 @@ export function parseJsonFrom(text) {
       }
     }
   }
-  throw new LlmError(`model reply contained no JSON object: ${text.slice(0, 200)}`);
+  throw new LlmError(`model reply contained no JSON object: ${text}`);
 }

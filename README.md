@@ -96,8 +96,11 @@ and `preview-scene` when their path is omitted.
 
 Sculpt jobs whose config sets `verify.requireAnimations` / `verify.minAnimationClips`
 produce rigged assets: the model builds an armature, parents the mesh with
-automatic weights, and keyframes named Actions ("idle" plus one characteristic
-motion). `animate` supplies deterministic, visibly moving presets when an
+automatic weights, and keyframes named Actions ("idle" plus characteristic
+motions, as many as `verify.minAnimationClips` states). A sculpt needs
+`llm.maxRounds` (or `--rounds`) and `llm.maxTokens` in the pipeline config and
+refuses to start without them; its prompt names the triangle budget only when
+`verify.triTarget` states one. `animate` supplies deterministic, visibly moving presets when an
 LLM-authored clip is structurally present but visually static. `preview-anim`
 renders one clip through Blender into a looping GIF. `preview-scene` renders
 the selected model on neutral ground as a PNG, with a bounds-framed camera;
@@ -121,9 +124,11 @@ contracts](https://glina.wisent.com/docs/cli/animate).
 ## Verification gate
 
 Every produced `.glb` passes `pipeline/verify.js`: valid glTF container,
-mesh/primitive sanity, triangle budget (default 6000 ±100%), materials/skins/
-animation clips and changing animation channels, file-size bounds, optional
-Blender render smoke. The gate fails the job; it never warns.
+mesh/primitive sanity, the triangle budget when the config states
+`verify.triTarget` (with its `verify.triTolerancePct`; a target without a
+tolerance is refused), materials/skins/animation clips and changing animation
+channels, optional Blender render smoke at the scene's own render size. The
+gate fails the job; it never warns.
 
 ## Example outputs
 

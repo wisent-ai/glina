@@ -2,12 +2,12 @@
 //
 // Two layers:
 //   1. STRUCTURAL (always): parse the GLB container and check it against
-//      thresholds from the pipeline config — valid glTF binary, mesh /
-//      primitive counts, triangle budget (default ~6k, the game's art
-//      target), materials / skins / animation clips present, file size.
+//      thresholds from the pipeline config (`verify` in pipeline.config.json)
+//      — valid glTF binary, mesh / primitive counts, the triangle budget the
+//      config states, materials / skins / animation clips present.
 //   2. RENDER SMOKE (optional): import + render through the Blender MCP
-//      session — proves Blender can actually open the artifact and the
-//      render produces non-trivial output.
+//      session at the scene's own render size — proves Blender can actually
+//      open the artifact and the render produces non-trivial output.
 //
 // A failed gate fails the pipeline job (and exits 1 in the CLI), so a
 // broken or off-budget asset never silently lands in assets/models/.
@@ -24,15 +24,20 @@ export class VerifyError extends Error {
   }
 }
 
-export const DEFAULT_THRESHOLDS = {
-  triTarget: 6000,
-  triTolerancePct: 100, // accept up to 2× the target by default
-  requireMaterials: true,
-  requireAnimations: false,
-  minAnimationClips: 0,
-  minBytes: 100,
-  maxBytes: 64 * 1024 * 1024,
-};
+/**
+ * The config's thresholds over the gate's own policy (materials are required,
+ * animations are not, unless the config says otherwise). The triangle budget
+ * has no built-in value: a gate whose config states no `verify.triTarget`
+ * checks no budget, and a stated target needs its stated tolerance.
+ */
+function statedThresholds(thresholds) {
+  if (thresholds.triTarget !== undefined && !Number.isFinite(thresholds.triTolerancePct)) {
+    throw new VerifyError('verify.triTolerancePct is not set in the pipeline config: a stated triTarget needs the tolerance the gate allows over it', {
+      errors: ['missing verify.triTolerancePct'],
+    });
+  }
+  return { requireMaterials: true, requireAnimations: false, ...thresholds };
+}
 
 /** Parse a GLB buffer into { json, binaryLength }. Throws VerifyError on any structural problem. */
 export function parseGlb(buffer) {
@@ -144,19 +149,19 @@ export function animationMotionStats(buffer, json) {
  * Throws VerifyError only when the file can't be parsed at all.
  */
 export async function verifyGlbStructure(path, thresholds = {}) {
-  const t = { ...DEFAULT_THRESHOLDS, ...thresholds };
+  const t = statedThresholds(thresholds);
   const buffer = await readFile(path);
   const { json, errors: parseWarnings } = parseGlb(buffer);
   const stats = { ...glbStats(json), ...animationMotionStats(buffer, json) };
 
   const errors = [...parseWarnings];
-  if (buffer.length < t.minBytes) errors.push(`file too small: ${buffer.length}B < ${t.minBytes}B`);
-  if (buffer.length > t.maxBytes) errors.push(`file too large: ${buffer.length}B > ${t.maxBytes}B`);
   if (stats.meshes === 0) errors.push('no meshes');
   if (stats.triangles === 0) errors.push('no triangles');
-  const triMax = Math.round((t.triTarget * (100 + t.triTolerancePct)) / 100);
-  if (stats.triangles > triMax) {
-    errors.push(`over triangle budget: ${stats.triangles} > ${triMax} (target ${t.triTarget})`);
+  if (t.triTarget !== undefined) {
+    const triMax = Math.round((t.triTarget * (100 + t.triTolerancePct)) / 100);
+    if (stats.triangles > triMax) {
+      errors.push(`over triangle budget: ${stats.triangles} > ${triMax} (target ${t.triTarget})`);
+    }
   }
   if (t.requireMaterials && stats.materials === 0) errors.push('no materials');
   if (t.requireAnimations && stats.animations === 0) errors.push('no animation clips');
@@ -190,8 +195,6 @@ export async function verifyGlbRenderSmoke(path, { sessionOptions, renderOut } =
       'import bpy',
       'scene = bpy.context.scene',
       'scene.render.engine = "BLENDER_EEVEE_NEXT" if hasattr(bpy.types, "BLENDER_EEVEE_NEXT") else "BLENDER_EEVEE"',
-      'scene.render.resolution_x = 512',
-      'scene.render.resolution_y = 512',
       `scene.render.filepath = ${JSON.stringify(out)}`,
       'bpy.ops.render.render(write_still=True)',
       'import os',

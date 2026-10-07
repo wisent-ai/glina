@@ -1,16 +1,18 @@
 #!/bin/sh
 # Run the GLB quality gate against the repo's reference dragon, twice:
-# once with default thresholds (passes) and once with deliberately strict
+# once with a config that states no thresholds (structure, materials and
+# animation presence only; passes) and once with deliberately strict
 # thresholds (fails, exit 1). No vault, browser, or Blender is touched.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+WORK="$ROOT/build/verify-walkthrough"
+mkdir -p "$WORK"
 
-echo "== default thresholds (no config file needed)"
+echo "== no stated thresholds"
+echo '{}' > "$WORK/plain.json"
 node "$ROOT/pipeline/cli.js" verify "$ROOT/assets/models/smok.glb" \
-  --config "$WORK/absent.json"
+  --config "$WORK/plain.json"
 
 echo "== strict thresholds (gate refuses, exit 1)"
 cat > "$WORK/strict.json" <<'EOF'

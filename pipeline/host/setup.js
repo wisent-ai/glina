@@ -36,7 +36,7 @@ async function which(binary, { env } = {}) {
 async function run(cmd, args, { dryRun, log } = {}) {
   log?.(`$ ${cmd} ${args.join(' ')}`);
   if (dryRun) return { stdout: '', stderr: '' };
-  return execFileAsync(cmd, args, { maxBuffer: 8 * 1024 * 1024 });
+  return execFileAsync(cmd, args, { maxBuffer: Infinity });
 }
 
 /** The provisioning plan as data, so tests can inspect it without installing. */

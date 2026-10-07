@@ -133,7 +133,6 @@ export async function renderAnimationPreview({
       'step = max(1, (end - start + 1) // TARGET_FRAMES) if TARGET_FRAMES else 1',
       'scene = bpy.context.scene',
       "scene.render.engine = 'BLENDER_EEVEE_NEXT' if hasattr(bpy.types, 'BLENDER_EEVEE_NEXT') else 'BLENDER_EEVEE'",
-      'scene.render.resolution_x = scene.render.resolution_y = 512',
       'scene.render.image_settings.file_format = "PNG"',
       'scene.frame_start, scene.frame_end = start, end',
       '',

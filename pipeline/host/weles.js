@@ -228,5 +228,5 @@ function extractId(result) {
   if (match) return Number(match[1]);
   const bare = /(\d+)/.exec(text);
   if (bare) return Number(bare[1]);
-  throw new WelesError(`could not parse id from weles MCP reply: ${text.slice(0, 200)}`);
+  throw new WelesError(`could not parse id from weles MCP reply: ${text}`);
 }
