@@ -6,13 +6,13 @@ import { test } from 'node:test';
 
 const root = resolve(import.meta.dirname, '../..');
 
-test('check-config resolves supported model credentials and refuses unsupported backends', async () => {
+test('config check resolves supported model credentials and refuses unsupported backends', async () => {
   const build = join(root, 'build', 'tests');
   await mkdir(build, { recursive: true });
   const directory = await mkdtemp(join(build, 'config-'));
   const configPath = join(directory, 'pipeline.config.json');
   const credentialsPath = join(directory, 'credentials.json');
-  const run = () => spawnSync(process.execPath, ['pipeline/cli.js', 'check-config', '--config', configPath], {
+  const run = () => spawnSync(process.execPath, ['pipeline/cli.js', 'config', 'check', '--config', configPath], {
     cwd: root,
     env: { ...process.env, GLINA_CREDENTIALS_FILE: credentialsPath },
     encoding: 'utf8',
@@ -64,4 +64,24 @@ test('check-config resolves supported model credentials and refuses unsupported 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('the config group refuses a missing or unknown leaf and the retired spellings', () => {
+  const glina = (...words) => spawnSync(process.execPath, ['pipeline/cli.js', ...words], { cwd: root, encoding: 'utf8' });
+  const refuses = (words, message) => {
+    const refused = glina(...words);
+    assert.ok(refused.status, `glina ${words.join(' ')} succeeded: ${refused.stdout}`);
+    assert.match(refused.stderr, message);
+  };
+  refuses(['config'], /config takes check or export --out <path>/);
+  refuses(['config', 'sideways'], /config takes check or export --out <path>/);
+  refuses(['config', 'export'], /config export requires --out <path>/);
+  refuses(['preview', 'sideways'], /preview takes anim or scene/);
+  for (const retired of ['check-config', 'export-config', 'preview-anim', 'preview-scene']) {
+    refuses([retired], new RegExp(`unknown command: ${retired}`));
+  }
+  const help = glina('config', '--help');
+  assert.ok(!help.status, help.stderr);
+  assert.match(help.stdout, /usage: glina config check/);
+  assert.match(help.stdout, /usage: glina config export --out <path>/);
 });

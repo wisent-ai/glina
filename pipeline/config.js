@@ -4,7 +4,7 @@
 // address those fields by the role their vault item plays
 // (role://<role>/<field>); URLs, model names and selectors are not guessed to
 // be secrets from their spelling. References are resolved only in memory. An
-// export-config handoff marks its root as already resolved.
+// `config export` handoff marks its root as already resolved.
 
 import { readFile } from 'node:fs/promises';
 import { isRoleRef, resolveConfigSecrets, CredentialError } from './host/credentials.js';

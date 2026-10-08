@@ -3,7 +3,7 @@
 //
 // Commands:
 //   create <prompt> [--race <race>] [--out <dir>] [--config <path>]
-//   check-config [--config <path>]     validate + resolve the config (no browser)
+//   config check [--config <path>]     validate + resolve the config (no browser)
 //   doctor [--config <path>]           check the config, the Blender bridge and the browser layer
 //
 // Credentials: role:// refs in the config, answered by `stado credentials get
@@ -100,8 +100,33 @@ async function main() {
       process.exitCode = 2;
       return;
     }
-    case 'check-config': {
-      print(await checkPipelineConfig(configPath));
+    case 'config': {
+      const [leaf] = positional;
+      if (leaf === 'check') {
+        print(await checkPipelineConfig(configPath));
+        return;
+      }
+      if (leaf !== 'export') {
+        console.error(`error: config takes check or export --out <path>; got ${JSON.stringify(positional)}`);
+        process.exitCode = 2;
+        return;
+      }
+      // Submit-time secret resolution for REMOTE runs (stado): resolves all
+      // role:// refs locally (the vault never leaves this host) and
+      // writes a mode-0600 resolved config the worker consumes directly —
+      // the same owner-only-env-file pattern as `skarbiec resolve --emit`.
+      // Nothing secret is printed.
+      const out = options.out;
+      if (!out) {
+        console.error('error: config export requires --out <path>');
+        process.exitCode = 2;
+        return;
+      }
+      const config = await loadPipelineConfig(configPath);
+      const { writeFile, chmod } = await import('node:fs/promises');
+      await writeFile(out, JSON.stringify({ _resolved: true, ...config }, null, 2));
+      await chmod(out, 0o600);
+      print({ out, resolved: true });
       return;
     }
     case 'doctor': {
@@ -117,25 +142,6 @@ async function main() {
       });
       print(report);
       if (!report.healthy) process.exitCode = 1;
-      return;
-    }
-    case 'export-config': {
-      // Submit-time secret resolution for REMOTE runs (stado): resolves all
-      // role:// refs locally (the vault never leaves this host) and
-      // writes a mode-0600 resolved config the worker consumes directly —
-      // the same owner-only-env-file pattern as `skarbiec resolve --emit`.
-      // Nothing secret is printed.
-      const out = options.out;
-      if (!out) {
-        console.error('error: export-config requires --out <path>');
-        process.exitCode = 2;
-        return;
-      }
-      const config = await loadPipelineConfig(configPath);
-      const { writeFile, chmod } = await import('node:fs/promises');
-      await writeFile(out, JSON.stringify({ _resolved: true, ...config }, null, 2));
-      await chmod(out, 0o600);
-      print({ out, resolved: true });
       return;
     }
     case 'verify': {
@@ -217,15 +223,20 @@ async function main() {
       print(result);
       return;
     }
-    case 'preview-anim':
-    case 'preview-scene': {
-      const file = positional[0] ?? await activeAssetPath();
-      if (!file) {
-        console.error(`error: ${command} requires a .glb path or an active imported asset`);
+    case 'preview': {
+      const [leaf, path] = positional;
+      if (leaf !== 'anim' && leaf !== 'scene') {
+        console.error(`error: preview takes anim or scene; got ${JSON.stringify(positional)}`);
         process.exitCode = 2;
         return;
       }
-      print(await runPreviewCommand(command, file, options, configPath));
+      const file = path ?? await activeAssetPath();
+      if (!file) {
+        console.error(`error: preview ${leaf} requires a .glb path or an active imported asset`);
+        process.exitCode = 2;
+        return;
+      }
+      print(await runPreviewCommand(leaf, file, options, configPath));
       return;
     }
     case 'help':

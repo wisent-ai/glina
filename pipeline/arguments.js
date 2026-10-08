@@ -51,22 +51,23 @@ export function render(value, text) {
 }
 
 // One table, two readers: the top-level usage is every row in this order,
-// and `glina <command> --help` is that command's row (cli.md rule 11).
+// and `glina <command> --help` is that command's rows (cli.md rule 11): a
+// group such as `config` or `preview` answers with every one of its leaves.
 export const COMMANDS = [
   { name: 'onboarding', usage: 'onboarding [--reset] [--asset file.glb] [--name id]', help: 'first-run import or walkthrough replay' },
   { name: 'import', usage: 'import <file.glb> [--name id] [--variant-of base-id] [--config path]', help: 'validate, persist, and activate an asset or a variant of a base' },
   { name: 'workspace', usage: 'workspace [list | select <id> | remove <id>]', help: 'list imported assets and the active input; make one active; or take one out and delete its copy (the source file stays)' },
   { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the Weles browser layer' },
   { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'LLM (Opus) iteratively builds the model in Blender' },
-  { name: 'preview-anim', usage: 'preview-anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif] [--config path]', help: 'render an animated GIF of one clip through Blender' },
-  { name: 'preview-scene', usage: 'preview-scene [file.glb] [--out f.png] [--size px] [--config path]', help: 'render the asset on neutral ground in a framed Blender scene' },
+  { name: 'preview anim', usage: 'preview anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif] [--config path]', help: 'render an animated GIF of one clip through Blender' },
+  { name: 'preview scene', usage: 'preview scene [file.glb] [--out f.png] [--size px] [--config path]', help: 'render the asset on neutral ground in a framed Blender scene' },
   { name: 'animate', usage: 'animate [file.glb] --preset <name> [--out animated.glb] [--config path]', help: "apply a declared preset's visibly moving actions" },
   { name: 'showcase', usage: 'showcase <asset> [--out file.glb] [--config path]', help: 'build a declared animated reference asset' },
   { name: 'showcases', usage: 'showcases [list | add <name> <file.json> | remove <name>]', help: 'manage bundled and user showcase declarations' },
   { name: 'presets', usage: 'presets [list | add <name> <file.json> | remove <name>]', help: 'manage bundled and user animation presets' },
   { name: 'verify', usage: 'verify [file.glb] [--config path]', help: 'structural + optional render gate' },
-  { name: 'check-config', usage: 'check-config [--config path]', help: 'validate the config, resolve vault references and check the model backend' },
-  { name: 'export-config', usage: 'export-config --out <path> [--config path]', help: 'write a resolved, owner-only config for a remote run' },
+  { name: 'config check', usage: 'config check [--config path]', help: 'validate the config, resolve vault references and check the model backend' },
+  { name: 'config export', usage: 'config export --out <path> [--config path]', help: 'write a resolved, owner-only config for a remote run' },
   { name: 'doctor', usage: 'doctor [--config path]', help: 'check the config and vault references, the Blender MCP bridge (handshake + code probe) and the browser layer (Weles MCP tools); exits 1 when any check fails' },
   { name: 'setup', usage: 'setup [--check] [--dry-run]', help: 'provision Blender, uv and the MCP for Blender addon; --check inspects tools only' },
 ];
@@ -97,10 +98,14 @@ ${rows(COMMANDS).join('\n')}
 
 ${BOUNDARIES}`;
 
-/** The help for one command, or the whole usage when the word is not a command. */
+/** The help for one command or group, or the whole usage when the word is neither. */
 export function commandHelp(name) {
-  const own = COMMANDS.filter((command) => command.name === name);
+  const own = COMMANDS.filter((command) => {
+    const [word] = command.name.split(' ');
+    return word === name;
+  });
   if (own.length === 0) return USAGE;
-  return `usage: glina ${own[0].usage} [--text]\n\n${rows(own).join('\n')}\n\n${BOUNDARIES}`;
+  const usage = own.map((command) => `usage: glina ${command.usage} [--text]`).join('\n');
+  return `${usage}\n\n${rows(own).join('\n')}\n\n${BOUNDARIES}`;
 }
 

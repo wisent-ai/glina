@@ -23,7 +23,7 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
    --field FIELD` (`STADO_BIN` names another executable), or on a machine
    without Stado from the owner-only JSON file `GLINA_CREDENTIALS_FILE` names
    (role → field → value, mode 600; a file others can read is refused). The
-   loader refuses inline credential fields. `glina check-config` validates the
+   loader refuses inline credential fields. `glina config check` validates the
    selected model backend and prints references as `<resolved: ok>`; it
    refuses resolved handoff files because they contain plaintext secrets.
 2. **Browser**: only via the Weles MCP stdio server (`weles-mcp`), never a
@@ -61,12 +61,12 @@ installs that release. The example configuration ships as
 glina onboarding [--reset] [--asset existing.glb]   # first-run import or replay
 glina import existing.glb [--name asset-id] [--variant-of base-id]
 glina workspace [list | select <id> | remove <id>]  # inspect, activate, or remove
-glina check-config                                   # validate config, vault refs and model backend
+glina config check                                   # validate config, vault refs and model backend
 glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
 glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
 glina verify [assets/models/tower.glb]               # explicit or active GLB gate
-glina preview-anim [assets/models/dragon.glb]        # one clip as an animated GIF
-glina preview-scene [assets/models/dragon.glb]       # neutral-ground PNG via Blender
+glina preview anim [assets/models/dragon.glb]        # one clip as an animated GIF
+glina preview scene [assets/models/dragon.glb]       # neutral-ground PNG via Blender
 glina animate [rigged.glb] --preset motion --out build/moving.glb
 glina showcase biped --out build/biped.glb
 glina showcases [list | add <name> <file.json> | remove <name>]
@@ -89,8 +89,8 @@ commits only accepted content under `$XDG_DATA_HOME/glina` or
 existing base; removing that base is refused until its variants are removed.
 Repeated SHA-256 content is `unchanged`; the same name with different content
 is `conflicting`; invalid data is `rejected` without a partial manifest update.
-The active destination is the default for `verify`, `animate`, `preview-anim`,
-and `preview-scene` when their path is omitted.
+The active destination is the default for `verify`, `animate`, `preview anim`,
+and `preview scene` when their path is omitted.
 
 ## Animations
 
@@ -101,8 +101,8 @@ motions, as many as `verify.minAnimationClips` states). A sculpt needs
 `llm.maxRounds` (or `--rounds`) and `llm.maxTokens` in the pipeline config and
 refuses to start without them; its prompt names the triangle budget only when
 `verify.triTarget` states one. `animate` supplies deterministic, visibly moving presets when an
-LLM-authored clip is structurally present but visually static. `preview-anim`
-renders one clip through Blender into a looping GIF. `preview-scene` renders
+LLM-authored clip is structurally present but visually static. `preview anim`
+renders one clip through Blender into a looping GIF. `preview scene` renders
 the selected model on neutral ground as a PNG, with a bounds-framed camera;
 both require a live Blender MCP session and report the failed operation.
 

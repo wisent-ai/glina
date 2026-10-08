@@ -62,7 +62,7 @@
       "transitions": [],
       "presentation": {
         "title": "Import the GLB you want to keep working on",
-        "body": "Run the import on a real GLB. Glina validates the staged bytes before committing them, preserves existing assets, reports repeated content as unchanged and name collisions as conflicting, then makes an accepted destination the default for verify, animate, and preview-anim.",
+        "body": "Run the import on a real GLB. Glina validates the staged bytes before committing them, preserves existing assets, reports repeated content as unchanged and name collisions as conflicting, then makes an accepted destination the default for verify, animate, and preview anim.",
         "command": "glina onboarding --asset PATH/TO/ASSET.glb",
         "result": "A JSON result with imported or unchanged status, the durable destination path, and the quality report that accepted it"
       }

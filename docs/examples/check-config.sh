@@ -12,13 +12,13 @@ echo "== non-secret config loads and prints"
 cat > "$WORK/plain.json" <<'EOF'
 { "llm": { "maxRounds": 8 }, "verify": { "enabled": true, "triTarget": 6000 }, "blender": { "enabled": false, "mcp": {} } }
 EOF
-node "$ROOT/pipeline/cli.js" check-config --config "$WORK/plain.json"
+node "$ROOT/pipeline/cli.js" config check --config "$WORK/plain.json"
 
 echo "== inline secret is refused (exit 1)"
 cat > "$WORK/inline.json" <<'EOF'
 { "credentials": { "username": "you@example.com", "password": "hunter2" } }
 EOF
-if node "$ROOT/pipeline/cli.js" check-config --config "$WORK/inline.json"; then
+if node "$ROOT/pipeline/cli.js" config check --config "$WORK/inline.json"; then
   echo "unexpected: inline secret accepted" >&2
   exit 1
 fi
