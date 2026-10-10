@@ -128,17 +128,34 @@ function completer(cfg, fetch_, label, sign) {
     } catch (error) {
       throw new LlmError(`${label} unreachable at ${url}: ${error.message}`, { cause: error });
     }
-    const body = await response.json().catch(() => ({}));
+    let raw;
+    try {
+      raw = await response.text();
+    } catch (error) {
+      throw new LlmError(
+        `${label} HTTP ${response.status} at ${url}: reading response failed: ${error.message}`,
+        { status: response.status, cause: error },
+      );
+    }
     if (!response.ok) {
       throw new LlmError(
-        `${label} HTTP ${response.status}: ${body?.error?.message ?? 'unknown'}`,
+        `${label} HTTP ${response.status} ${response.statusText} at ${url}; response body: ${JSON.stringify(raw)}`,
         { status: response.status },
       );
     }
-    const text = body.choices?.[0]?.message?.content ?? '';
-    if (!text.trim()) {
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch (error) {
       throw new LlmError(
-        `${label} answered with no content (finish_reason ${body.choices?.[0]?.finish_reason ?? 'none'})`,
+        `${label} HTTP ${response.status} at ${url}: invalid JSON: ${error.message}; response: ${raw}`,
+        { status: response.status, cause: error },
+      );
+    }
+    const text = body?.choices?.[0]?.message?.content;
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new LlmError(
+        `${label} HTTP ${response.status} at ${url}: expected non-empty text at choices[0].message.content; response: ${raw}`,
         { status: response.status },
       );
     }
