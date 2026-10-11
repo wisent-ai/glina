@@ -183,6 +183,20 @@ export class BlenderSession {
 }
 
 /**
+ * Close a Blender MCP session from a `finally` block. A failed close must not
+ * replace the job's own outcome, but it can leave Blender running, so it is
+ * said on stderr with its cause instead of being dropped.
+ */
+export async function releaseSession(session) {
+  if (!session) return;
+  try {
+    await session.close();
+  } catch (error) {
+    console.error(`[blender] MCP session close failed, Blender may still be running: ${error.message}`);
+  }
+}
+
+/**
  * One post-processing job on a model file: import → run a config-supplied
  * Blender Python body → export GLB. The body sees `INPUT_PATH` and
  * `OUTPUT_PATH` as injected globals.
@@ -198,6 +212,6 @@ export async function postProcessModel({ inputPath, outputPath, processCode, ses
     await session.exportGlb(outputPath);
     return { outputPath };
   } finally {
-    await session.close().catch(() => {});
+    await releaseSession(session);
   }
 }

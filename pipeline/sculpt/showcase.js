@@ -8,7 +8,7 @@
 
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { BlenderSession } from '../gate/blender.js';
+import { BlenderSession, releaseSession } from '../gate/blender.js';
 import { verifyAsset } from '../gate/verify.js';
 import { load } from '../rigs/declared.js';
 import { workspaceRoot } from '../workspace/store.js';
@@ -28,7 +28,7 @@ export async function buildShowcase({ outputPath, asset, sessionOptions } = {}) 
     await session.execute(showcaseProgram(spec));
     await session.exportGlb(outputPath);
   } finally {
-    await session.close().catch(() => {});
+    await releaseSession(session);
   }
   const verification = await verifyAsset(outputPath, {
     verify: {

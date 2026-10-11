@@ -8,7 +8,7 @@
 
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { BlenderSession } from '../gate/blender.js';
+import { BlenderSession, releaseSession } from '../gate/blender.js';
 import { buildCompleter, parseJsonFrom, LlmError } from './llm.js';
 import { verifyAsset } from '../gate/verify.js';
 
@@ -103,8 +103,9 @@ async function tryViewportScreenshot(session, tools) {
     if (image?.data) {
       return { base64: image.data, mediaType: image.mimeType ?? 'image/png' };
     }
-  } catch {
-    // screenshot is best-effort; the loop works text-only too
+  } catch (error) {
+    // The round goes on text-only; the reason it has no viewport is said.
+    console.error(`[sculpt] viewport screenshot failed, this round is text-only: ${error.message}`);
   }
   return null;
 }
@@ -157,7 +158,11 @@ export async function sculptWithLlm(job, config, deps = {}) {
   ];
 
   try {
-    const tools = await session.listTools().catch(() => []);
+    const tools = await session.listTools().catch((error) => {
+      // Without the tool list no round can ask for a viewport screenshot.
+      console.error(`[sculpt] Blender MCP tools could not be listed, sculpting text-only: ${error.message}`);
+      return [];
+    });
     let exported = false;
     let rounds = 0;
 
@@ -228,7 +233,7 @@ export async function sculptWithLlm(job, config, deps = {}) {
 
     return { outPath, verification, rounds, transcript };
   } finally {
-    await session.close().catch(() => {});
+    await releaseSession(session);
   }
 }
 

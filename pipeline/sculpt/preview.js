@@ -9,7 +9,7 @@
 import { mkdir, mkdtemp, readdir, rename, rm, stat } from 'node:fs/promises';
 import { join, dirname, basename, extname } from 'node:path';
 import { spawn } from 'node:child_process';
-import { BlenderSession } from '../gate/blender.js';
+import { BlenderSession, releaseSession } from '../gate/blender.js';
 import { workspaceRoot } from '../workspace/store.js';
 
 export class PreviewError extends Error {}
@@ -190,7 +190,7 @@ export async function renderAnimationPreview({
     return { outPath: finalOut, clip, frames: rendered.length, fps: playback, tool };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
-    await session.close().catch(() => {});
+    await releaseSession(session);
   }
 }
 
@@ -290,7 +290,7 @@ export async function renderScenePreview({ glbPath, outPath, size, sessionOption
       scene: 'neutral-ground',
     };
   } finally {
-    await session?.close().catch(() => {});
+    await releaseSession(session);
     await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {});
   }
 }

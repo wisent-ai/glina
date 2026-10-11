@@ -13,7 +13,7 @@
 // broken or off-budget asset never silently lands in assets/models/.
 
 import { readFile } from 'node:fs/promises';
-import { BlenderSession } from './blender.js';
+import { BlenderSession, releaseSession } from './blender.js';
 
 export class VerifyError extends Error {
   constructor(message, { errors, cause } = {}) {
@@ -203,7 +203,7 @@ export async function verifyGlbRenderSmoke(path, { sessionOptions, renderOut } =
     const result = await session.execute(code);
     return { ok: true, renderPath: out, detail: String(result) };
   } finally {
-    await session.close().catch(() => {});
+    await releaseSession(session);
   }
 }
 

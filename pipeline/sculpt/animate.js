@@ -5,7 +5,7 @@
 // the explicit poses a declared preset (assets/presets/<name>.json) names,
 // export, then let the normal gate inspect the result.
 
-import { BlenderSession } from '../gate/blender.js';
+import { BlenderSession, releaseSession } from '../gate/blender.js';
 import { verifyAsset } from '../gate/verify.js';
 import { load } from '../rigs/declared.js';
 import { presetProgram } from '../rigs/interpreter.js';
@@ -22,7 +22,7 @@ export async function animatePreset({ inputPath, outputPath, preset, sessionOpti
     await session.execute(presetProgram(spec));
     await session.exportGlb(outputPath);
   } finally {
-    await session.close().catch(() => {});
+    await releaseSession(session);
   }
   const verification = await verifyAsset(outputPath, {
     verify: {
