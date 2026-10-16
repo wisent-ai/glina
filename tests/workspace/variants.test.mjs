@@ -8,8 +8,11 @@ import { test } from 'node:test';
 const root = resolve(import.meta.dirname, '../..');
 const build = join(root, 'build', 'tests');
 
+// Each run reads the empty config its data directory holds, never the
+// checkout's own pipeline.config.json, so a developer's config cannot decide
+// what the test sees.
 function glina(data, ...args) {
-  return spawnSync(process.execPath, ['pipeline/cli.js', ...args], {
+  return spawnSync(process.execPath, ['pipeline/cli.js', ...args, '--config', join(data, 'pipeline.config.json')], {
     cwd: root,
     env: { ...process.env, XDG_DATA_HOME: data },
     encoding: 'utf8',
@@ -22,9 +25,18 @@ function success(data, ...args) {
   return JSON.parse(result.stdout);
 }
 
+// A refusal exits non-zero and says why; the reason, not the code, tells a
+// refusal from a usage error.
+function refused(data, ...args) {
+  const result = glina(data, ...args);
+  assert.ok(result.status, `${args.join(' ')} was accepted: ${result.stdout}`);
+  return result;
+}
+
 test('CLI retains variants, refuses destructive parent removal, and migrates existing workspaces', async () => {
   await mkdir(build, { recursive: true });
   const data = await mkdtemp(join(build, 'variants-'));
+  await writeFile(join(data, 'pipeline.config.json'), '{}\n');
   try {
     const base = success(data, 'import', 'assets/models/smok.glb', '--name', 'creature');
     assert.equal(base.status, 'imported');
@@ -48,28 +60,24 @@ test('CLI retains variants, refuses destructive parent removal, and migrates exi
     assert.equal(persisted.activeAsset, 'human');
     assert.equal(persisted.assets.find((asset) => asset.id === 'human').variantOf, 'creature');
 
-    const parentRemoval = glina(data, 'workspace', 'remove', 'creature');
-    assert.equal(parentRemoval.status, 1);
+    const parentRemoval = refused(data, 'workspace', 'remove', 'creature');
     assert.match(parentRemoval.stderr, /has variants human; remove those variants/);
     assert.ok(existsSync(base.path));
     assert.ok(existsSync(variant.path));
 
-    const sameContent = glina(data, 'import', 'assets/models/smok.glb', '--name', 'copy', '--variant-of', 'creature');
-    assert.equal(sameContent.status, 1);
+    const sameContent = refused(data, 'import', 'assets/models/smok.glb', '--name', 'copy', '--variant-of', 'creature');
     assert.match(JSON.parse(sameContent.stdout).reason, /same content as existing asset creature/);
 
-    const missingParent = glina(data, 'import', 'assets/models/humans_reference.glb', '--name', 'orphan', '--variant-of', 'missing');
-    assert.equal(missingParent.status, 1);
+    const missingParent = refused(data, 'import', 'assets/models/humans_reference.glb', '--name', 'orphan', '--variant-of', 'missing');
     assert.match(JSON.parse(missingParent.stdout).reason, /parent missing is not in the Glina workspace/);
 
-    const malformedInput = glina(data, 'import', 'package.json', '--name', 'invalid', '--variant-of', 'creature');
-    assert.equal(malformedInput.status, 1);
+    const malformedInput = refused(data, 'import', 'package.json', '--name', 'invalid', '--variant-of', 'creature');
     assert.match(JSON.parse(malformedInput.stdout).reason, /only .glb files/);
 
     const selected = success(data, 'workspace', 'select', 'creature');
     assert.equal(selected.activeAsset, 'creature');
     const withoutVariant = success(data, 'workspace', 'remove', 'human');
-    assert.equal(withoutVariant.assets.length, 1);
+    assert.deepEqual(withoutVariant.assets.map((asset) => asset.id), ['creature']);
     assert.ok(!existsSync(variant.path));
     const empty = success(data, 'workspace', 'remove', 'creature');
     assert.equal(empty.activeAsset, null);

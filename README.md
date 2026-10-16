@@ -26,8 +26,15 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
    loader refuses inline credential fields. `glina config check` validates the
    selected model backend and prints references as `<resolved: ok>`; it
    refuses resolved handoff files because they contain plaintext secrets.
-2. **Browser**: only via the Weles MCP stdio server (`weles-mcp`), never a
-   local Chromium/profile.
+2. **Browser**: one layer under `browser`, never a local Chromium profile.
+   `browser.weles` drives Weles through
+   its MCP stdio server (`command`, default `weles-mcp`; `args`; `headless`;
+   `engine`). Without Weles, `browser.playwright_mcp` names the program that
+   starts the Playwright MCP server and its arguments (`command` and `args`,
+   both required); the studio selectors are passed to it as Playwright
+   targets and the artifact link is read from its `Result` reply. No
+   `browser` section, an empty one, any other key, or both at once is refused
+   by name.
 3. **Blender**: only via the MCP for Blender server (`uvx mcp-for-blender`
    default), never hand-rolled sockets.
 4. **Model access**: one backend under `models`. `models.brama` is
@@ -63,7 +70,7 @@ glina import existing.glb [--name asset-id] [--variant-of base-id]
 glina workspace [list | select <id> | remove <id>]  # inspect, activate, or remove
 glina config check                                   # validate config, vault refs and model backend
 glina sculpt "gothic dwarven tower, low-poly"        # LLM drives Blender
-glina create "dwarven axe warrior" --race dwarves    # studio flow via Weles browser
+glina create "dwarven axe warrior" --race dwarves    # studio flow via the declared browser layer
 glina verify [assets/models/tower.glb]               # explicit or active GLB gate
 glina preview anim [assets/models/dragon.glb]        # one clip as an animated GIF
 glina preview scene [assets/models/dragon.glb]       # neutral-ground PNG via Blender
@@ -79,8 +86,21 @@ glina doctor                                         # config, Blender bridge, b
 to check the code round trip; an addon installed on disk can still be inactive
 in the running Blender process.
 
+`doctor` reads the browser layer from the config: it starts the declared MCP
+server, lists its tools and reports `bridge` (`weles` or `playwright_mcp`),
+`command` and `tools`. A config that cannot be loaded fails the Blender and
+browser checks with that cause instead of probing a default server.
+
+`create` writes `<out>/<name>.glb` (`--out`, default `assets/models`); the
+name is the prompt's letters and digits joined by hyphens, and a prompt with
+none is refused. The MCP tool `glina_create_asset` also takes `filename`.
+
 MCP tools for agent hosts (`glina-mcp`): `glina_create_asset`,
 `glina_sculpt`, `glina_verify_asset`, `glina_check_config`, `glina_doctor`.
+`glina_verify_asset` loads its config as `glina verify` does: only an absent
+default `pipeline.config.json` leaves the built-in thresholds; an explicit
+`config` that cannot be read, or a default that does not parse, is a tool error
+naming the file.
 
 `glina import` accepts existing GLB data without invoking a model. It stages the
 exact bytes, runs the canonical structural and configured Blender gate, then
@@ -89,6 +109,11 @@ commits only accepted content under `$XDG_DATA_HOME/glina` or
 existing base; removing that base is refused until its variants are removed.
 Repeated SHA-256 content is `unchanged`; the same name with different content
 is `conflicting`; invalid data is `rejected` without a partial manifest update.
+The report's `accepted` is true for `imported` and `unchanged`, the outcomes
+that leave the asset in the workspace as the active input. Onboarding records
+its first success only on an accepted import; a progress file under
+`$XDG_STATE_HOME/glina/onboarding.json` that cannot be read or is not JSON is
+refused with the file and the cause rather than restarted.
 The active destination is the default for `verify`, `animate`, `preview anim`,
 and `preview scene` when their path is omitted.
 
@@ -145,16 +170,21 @@ Examples of generated assets:
 | macOS app | `wisent-ai/glina-desktop` |
 | Website | `wisent-ai/glina-landing` |
 
-The real CLI lifecycle tests live under `tests/cli/`, `tests/workspace/`
-and `tests/animation/`:
+The real CLI lifecycle tests live under `tests/cli/`, `tests/workspace/`,
+`tests/animation/`, `tests/mcp/` and `tests/onboarding/`:
 
 ```sh
-node --test tests/cli/*.test.mjs tests/workspace/*.test.mjs tests/animation/declarations.test.mjs
+node --test tests/cli/*.test.mjs tests/workspace/*.test.mjs tests/animation/declarations.test.mjs tests/mcp/*.test.mjs tests/onboarding/*.test.mjs
 ```
 
-These cover the installed-bin shape, workspace and declarations.
+These cover the installed-bin shape, workspace, declarations, the MCP verify
+config refusals and the onboarding progress refusal.
 `tests/preview/scene.test.mjs` and `tests/animation/catalogue.test.mjs`
 exercise live Blender and cannot pass with a disconnected add-on.
+`tests/browser/bridge.test.mjs` checks the browser refusals through
+`glina doctor`, then starts the real Playwright MCP server through `npx` (so
+it needs npm and a Playwright browser) and runs `glina create` against a
+studio page the test serves, comparing the written GLB with the linked one.
 
 ## License
 

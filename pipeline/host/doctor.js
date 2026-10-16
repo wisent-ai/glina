@@ -1,12 +1,27 @@
 // doctor.js — `glina doctor`: one check per dependency the pipeline needs,
 // each reaching the real thing (the config and its vault references, the
-// Blender MCP bridge, the Weles MCP browser layer) and reporting what it
-// observed. The report is the same for the CLI, the MCP tool and Glina
-// Desktop; it never names a vendor as the operation, only as the detail.
+// Blender MCP bridge, the browser layer the config declares) and reporting
+// what it observed. The report is the same for the CLI, the MCP tool and
+// Glina Desktop; it never names a vendor as the operation, only as the detail.
 
 import { checkPipelineConfig, loadPipelineConfig } from '../config.js';
-import { BlenderSession } from '../gate/blender.js';
-import { McpStdioClient } from './weles.js';
+import { BlenderSession, releaseSession } from '../gate/blender.js';
+import { probeBrowserBridge } from '../browser/bridge.js';
+
+/** A failed check: its message is the cause, `detail` what was observed. */
+class CheckFailure extends Error {
+  constructor(message, detail) {
+    super(message);
+    this.name = 'CheckFailure';
+    this.detail = detail;
+  }
+}
+
+const CHECKS = [
+  { name: 'config', run: configCheck },
+  { name: 'sculptor', run: sculptorCheck },
+  { name: 'browser', run: browserCheck },
+];
 
 /**
  * Run every check. Each entry is {name, ok, detail} and a failed check
@@ -16,61 +31,62 @@ import { McpStdioClient } from './weles.js';
  * @returns {Promise<{healthy: boolean, checks: object[]}>}
  */
 export async function runDoctor({ configPath }) {
-  const checks = [
-    await configCheck(configPath),
-    await sculptorCheck(configPath),
-    await browserCheck(),
-  ];
+  const outcomes = await Promise.allSettled(CHECKS.map((check) => check.run(configPath)));
+  const checks = outcomes.map((outcome, index) => {
+    const { name } = CHECKS[index];
+    if (outcome.status === 'fulfilled') {
+      return { name, ok: true, detail: outcome.value };
+    }
+    return { name, ok: false, detail: outcome.reason.detail, error: outcome.reason.message };
+  });
   return { healthy: checks.every((check) => check.ok), checks };
 }
 
 async function configCheck(configPath) {
-  try {
-    const resolved = await checkPipelineConfig(configPath);
-    return { name: 'config', ok: true, detail: { path: configPath, keys: Object.keys(resolved) } };
-  } catch (error) {
-    return { name: 'config', ok: false, detail: { path: configPath }, error: error.message };
-  }
+  const resolved = await checkPipelineConfig(configPath).catch((error) => {
+    throw new CheckFailure(error.message, { path: configPath });
+  });
+  return { path: configPath, keys: Object.keys(resolved) };
+}
+
+/** The config the bridge checks read their declarations from. */
+async function declaredConfig(configPath, bridge) {
+  return loadPipelineConfig(configPath).catch((error) => {
+    throw new CheckFailure(
+      `the config that declares the ${bridge} could not be loaded: ${error.message}`,
+      { path: configPath },
+    );
+  });
 }
 
 /** The Blender MCP bridge: handshake, tool list, and the trivial-code probe. */
 async function sculptorCheck(configPath) {
-  let sessionOptions;
-  try {
-    sessionOptions = (await loadPipelineConfig(configPath)).blender?.mcp;
-  } catch {
-    // The config check above already reports an unreadable config; the
-    // bridge is still probed with its defaults so both facts are visible.
-  }
-  let session;
-  try {
-    session = await BlenderSession.start(sessionOptions ?? {});
-  } catch (error) {
-    return { name: 'sculptor', ok: false, detail: { bridge: 'mcp-for-blender' }, error: error.message };
-  }
+  const config = await declaredConfig(configPath, 'Blender MCP bridge');
+  const detail = { bridge: 'mcp-for-blender' };
+  const session = await BlenderSession.start(config.blender?.mcp).catch((error) => {
+    throw new CheckFailure(error.message, detail);
+  });
   try {
     const health = await session.health();
     const tools = (await session.listTools()).map((tool) => tool.name);
-    const check = { name: 'sculptor', ok: health.healthy, detail: { bridge: 'mcp-for-blender', tools } };
-    if (!health.healthy) check.error = health.error;
-    return check;
-  } catch (error) {
-    return { name: 'sculptor', ok: false, detail: { bridge: 'mcp-for-blender' }, error: error.message };
+    if (!health.healthy) {
+      throw new CheckFailure(health.error, { ...detail, tools });
+    }
+    return { ...detail, tools };
   } finally {
-    await session.close();
+    // A close that fails is said by the releaser and does not replace the
+    // check's own answer with the close's error.
+    await releaseSession(session);
   }
 }
 
-/** The Weles MCP browser layer: handshake and the tools it exposes. */
-async function browserCheck() {
-  const client = new McpStdioClient({});
-  try {
-    await client.start();
-    const tools = (await client.listTools()).map((tool) => tool.name);
-    return { name: 'browser', ok: true, detail: { bridge: 'weles-mcp', tools } };
-  } catch (error) {
-    return { name: 'browser', ok: false, detail: { bridge: 'weles-mcp' }, error: error.message };
-  } finally {
-    await client.close();
-  }
+/**
+ * The declared browser layer (browser.weles or browser.playwright_mcp):
+ * handshake with its MCP server and the tools it exposes.
+ */
+async function browserCheck(configPath) {
+  const config = await declaredConfig(configPath, 'browser layer');
+  return probeBrowserBridge(config.browser).catch((error) => {
+    throw new CheckFailure(error.message, { path: configPath });
+  });
 }

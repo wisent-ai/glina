@@ -12,6 +12,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { platform } from 'node:os';
+import { access, constants } from 'node:fs/promises';
+import path from 'node:path';
 
 const execFileAsync = promisify(execFile);
 
@@ -24,13 +26,34 @@ export class SetupError extends Error {
   }
 }
 
+/** Errors that mean a PATH entry holds no such binary (the file system's own codes). */
+const ABSENT_CODES = new Set(['ENOENT', 'ENOTDIR']);
+
+/**
+ * The executable `binary` on PATH, or null when no PATH entry holds it. A
+ * candidate that cannot be checked for any other reason is an error naming
+ * it: reading it as 'not installed' made setup reinstall a tool it could not
+ * see.
+ */
 async function which(binary, { env } = {}) {
-  try {
-    const { stdout } = await execFileAsync('which', [binary], { env });
-    return stdout.trim() || null;
-  } catch {
-    return null;
+  const searchPath = (env ?? process.env).PATH;
+  if (!searchPath) {
+    throw new SetupError(`PATH is not set, so ${binary} cannot be looked for`, { step: binary });
   }
+  for (const directory of searchPath.split(path.delimiter).filter(Boolean)) {
+    const candidate = path.join(directory, binary);
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch (error) {
+      if (ABSENT_CODES.has(error.code)) continue;
+      throw new SetupError(`${candidate} could not be checked: ${error.message}`, {
+        step: binary,
+        cause: error,
+      });
+    }
+  }
+  return null;
 }
 
 async function run(cmd, args, { dryRun, log } = {}) {

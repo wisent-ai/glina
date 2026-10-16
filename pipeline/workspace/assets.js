@@ -11,6 +11,19 @@ import path from 'node:path';
 import { verifyAsset } from '../gate/verify.js';
 import { WORKSPACE_SCHEMA, readWorkspace, workspaceRoot, writeWorkspace } from './store.js';
 
+/**
+ * Remove a file this import made after the import already failed. The
+ * import's own refusal is the answer; a file that cannot be removed is said
+ * on stderr, because it stays in the workspace's assets directory.
+ */
+async function removeLeftover(file) {
+  try {
+    await rm(file, { force: true });
+  } catch (error) {
+    console.error(`[import] ${file} was left behind and could not be removed: ${error.message}`);
+  }
+}
+
 function validateName(name) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) {
     return 'asset name must start with an ASCII letter or digit and contain at most 64 letters, digits, dots, underscores, or hyphens';
@@ -40,6 +53,7 @@ async function digestFile(file) {
 function rejected(source, reason, verification) {
   return {
     status: 'rejected',
+    accepted: false,
     source,
     id: null,
     path: null,
@@ -52,6 +66,9 @@ function rejected(source, reason, verification) {
  * Validate one existing GLB, copy it into Glina's durable asset workspace, and
  * make the accepted copy the active input. The staging file is the exact bytes
  * verified, closing the source-change gap between validation and persistence.
+ * The report's `accepted` says whether the workspace now holds the asset as
+ * the active input, so callers decide on that field rather than on status
+ * names.
  */
 export async function importAsset(source, { name, variantOf = null, config = {} } = {}) {
   const sourceText = String(source ?? '').trim();
@@ -85,7 +102,7 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
     await copyFile(resolvedSource, temporary, fsConstants.COPYFILE_EXCL);
     await chmod(temporary, 0o600);
   } catch (error) {
-    await rm(temporary, { force: true }).catch(() => {});
+    await removeLeftover(temporary);
     return rejected(resolvedSource, `asset import could not stage ${resolvedSource}: ${error.message}`);
   }
 
@@ -93,11 +110,11 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
   try {
     verification = await verifyAsset(temporary, config);
   } catch (error) {
-    await rm(temporary, { force: true }).catch(() => {});
+    await removeLeftover(temporary);
     return rejected(resolvedSource, `asset import validation failed: ${error.message}`);
   }
   if (!verification.ok) {
-    await rm(temporary, { force: true }).catch(() => {});
+    await removeLeftover(temporary);
     return rejected(
       resolvedSource,
       `asset failed verification: ${verification.errors.join('; ')}`,
@@ -129,6 +146,7 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
     await writeWorkspace(workspace);
     return {
       status: 'unchanged',
+      accepted: true,
       source: resolvedSource,
       id: duplicate.id,
       path: duplicate.path,
@@ -143,6 +161,7 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
     await rm(temporary, { force: true });
     return {
       status: 'conflicting',
+      accepted: false,
       source: resolvedSource,
       id,
       path: conflicting.path,
@@ -155,10 +174,11 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
   try {
     await link(temporary, destination);
   } catch (error) {
-    await rm(temporary, { force: true }).catch(() => {});
+    await removeLeftover(temporary);
     if (error?.code === 'EEXIST') {
       return {
         status: 'conflicting',
+        accepted: false,
         source: resolvedSource,
         id,
         path: destination,
@@ -171,7 +191,7 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
   try {
     await rm(temporary, { force: true });
   } catch (error) {
-    await rm(destination, { force: true }).catch(() => {});
+    await removeLeftover(destination);
     throw error;
   }
   workspace.assets.push({
@@ -187,12 +207,13 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
   try {
     await writeWorkspace(workspace);
   } catch (error) {
-    await rm(destination, { force: true }).catch(() => {});
+    await removeLeftover(destination);
     throw error;
   }
 
   return {
     status: 'imported',
+    accepted: true,
     source: resolvedSource,
     id,
     path: destination,

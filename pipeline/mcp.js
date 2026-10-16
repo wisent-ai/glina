@@ -7,7 +7,7 @@
 // frames only, diagnostics go to stderr.
 
 import readline from 'node:readline';
-import { checkPipelineConfig, loadPipelineConfig } from './config.js';
+import { checkPipelineConfig, loadOptionalPipelineConfig, loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './show/text2game.js';
 import { verifyAsset } from './gate/verify.js';
 import { runDoctor } from './host/doctor.js';
@@ -25,7 +25,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         prompt: { type: 'string', description: 'Asset description, e.g. "dwarven axe warrior, low-poly"' },
-        race: { type: 'string', enum: ['humans', 'dwarves', 'elves', 'skeletons'] },
+        race: { type: 'string', description: 'Race prefixed to the prompt, as glina create --race does' },
         out_dir: { type: 'string', description: 'Output directory (default: assets/models)' },
         filename: { type: 'string', description: 'Output .glb filename' },
         config: { type: 'string', description: 'Path to pipeline.config.json' },
@@ -114,12 +114,11 @@ async function callTool(name, args = {}) {
       if (typeof args.path !== 'string' || !args.path) {
         return errorResult('path is required');
       }
-      let config = {};
-      try {
-        config = await loadPipelineConfig(configPath);
-      } catch {
-        // thresholds fall back to defaults
-      }
+      // The config is loaded as glina verify loads it: an explicit path must
+      // be read, and a default that exists but cannot be read or parsed is
+      // refused. Swallowed, the gate judged the asset against thresholds the
+      // operator never set.
+      const config = await loadOptionalPipelineConfig(configPath, typeof args.config !== 'string');
       return textResult(await verifyAsset(args.path, config));
     }
     case 'glina_sculpt': {

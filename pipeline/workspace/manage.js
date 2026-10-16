@@ -50,3 +50,7 @@ export async function removeAsset(id) {
   }
   return workspaceSummary();
 }
+
+// `glina workspace <action> <id>`: the actions that take an asset id are this
+// table's keys, and the CLI's refusal names them from it.
+export const ASSET_ACTIONS = Object.freeze({ select: selectAsset, remove: removeAsset });

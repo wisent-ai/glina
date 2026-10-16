@@ -69,11 +69,13 @@ export async function assembleGif(framesDir, outPath, fps) {
 }
 
 async function readdirSafeSize(p) {
+  const { stat } = await import('node:fs/promises');
   try {
-    const { stat } = await import('node:fs/promises');
     return (await stat(p)).size > 0;
-  } catch {
-    return false;
+  } catch (error) {
+    // Only a missing file is no GIF; any other failure is the cause itself.
+    if (error.code === 'ENOENT') return false;
+    throw new PreviewError(`the GIF at ${p} cannot be read: ${error.message}`, { cause: error });
   }
 }
 
@@ -189,7 +191,8 @@ export async function renderAnimationPreview({
     const { tool } = await assembleGif(framesDir, finalOut, playback);
     return { outPath: finalOut, clip, frames: rendered.length, fps: playback, tool };
   } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    await rm(dir, { recursive: true, force: true }).catch((error) =>
+      console.error(`[preview] frames directory ${dir} was not removed: ${error.message}`));
     await releaseSession(session);
   }
 }
@@ -291,6 +294,7 @@ export async function renderScenePreview({ glbPath, outPath, size, sessionOption
     };
   } finally {
     await releaseSession(session);
-    await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {});
+    await rm(temporaryDirectory, { recursive: true, force: true }).catch((error) =>
+      console.error(`[preview] temporary directory ${temporaryDirectory} was not removed: ${error.message}`));
   }
 }

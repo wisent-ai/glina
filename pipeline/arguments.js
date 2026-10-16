@@ -6,19 +6,21 @@
 
 export const DEFAULT_CONFIG = new URL('../pipeline.config.json', import.meta.url).pathname;
 
+const FLAG = '--';
+
 export function parseArgs(argv) {
   const [command, ...rest] = argv;
   const positional = [];
   const options = {};
-  for (let i = 0; i < rest.length; i += 1) {
-    const arg = rest[i];
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2);
-      const next = rest[i + 1];
+  const queue = [...rest];
+  while (queue.length) {
+    const arg = queue.shift();
+    if (arg.startsWith(FLAG)) {
+      const key = arg.slice(FLAG.length);
+      const [next] = queue;
       // `--text` takes no value, so it never swallows the word after it.
-      if (key !== 'text' && next && !next.startsWith('--')) {
-        options[key] = next;
-        i += 1;
+      if (key !== 'text' && next !== undefined && !next.startsWith(FLAG)) {
+        options[key] = queue.shift();
       } else {
         options[key] = true;
       }
@@ -29,17 +31,20 @@ export function parseArgs(argv) {
   return { command, positional, options };
 }
 
+/** The indentation of the JSON a command prints. */
+const JSON_INDENT = '  ';
+
 /**
  * One result as people or machines read it, from the same value (cli.md
  * rule 13): pretty JSON by default, `path: value` lines with `--text`.
  */
 export function render(value, text) {
-  if (!text) return JSON.stringify(value, null, 2);
+  if (!text) return JSON.stringify(value, null, JSON_INDENT);
   const lines = [];
   const walk = (node, path) => {
-    if (Array.isArray(node) && node.length > 0) {
+    if (Array.isArray(node) && node.length) {
       node.forEach((item, index) => walk(item, `${path}[${index}]`));
-    } else if (node && typeof node === 'object' && Object.keys(node).length > 0) {
+    } else if (node && typeof node === 'object' && Object.keys(node).length) {
       for (const [key, item] of Object.entries(node)) walk(item, path ? `${path}.${key}` : key);
     } else if (node !== undefined) {
       const shown = node === null || typeof node === 'object' ? '-' : String(node);
@@ -54,10 +59,10 @@ export function render(value, text) {
 // and `glina <command> --help` is that command's rows (cli.md rule 11): a
 // group such as `config` or `preview` answers with every one of its leaves.
 export const COMMANDS = [
-  { name: 'onboarding', usage: 'onboarding [--reset] [--asset file.glb] [--name id]', help: 'first-run import or walkthrough replay' },
+  { name: 'onboarding', usage: 'onboarding [--reset] [--asset file.glb] [--name id] [--config path]', help: 'first-run import or walkthrough replay' },
   { name: 'import', usage: 'import <file.glb> [--name id] [--variant-of base-id] [--config path]', help: 'validate, persist, and activate an asset or a variant of a base' },
   { name: 'workspace', usage: 'workspace [list | select <id> | remove <id>]', help: 'list imported assets and the active input; make one active; or take one out and delete its copy (the source file stays)' },
-  { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the Weles browser layer' },
+  { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the browser layer the config declares (browser.weles or browser.playwright_mcp)' },
   { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'LLM (Opus) iteratively builds the model in Blender' },
   { name: 'preview anim', usage: 'preview anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif] [--config path]', help: 'render an animated GIF of one clip through Blender' },
   { name: 'preview scene', usage: 'preview scene [file.glb] [--out f.png] [--size px] [--config path]', help: 'render the asset on neutral ground in a framed Blender scene' },
@@ -68,24 +73,23 @@ export const COMMANDS = [
   { name: 'verify', usage: 'verify [file.glb] [--config path]', help: 'structural + optional render gate' },
   { name: 'config check', usage: 'config check [--config path]', help: 'validate the config, resolve vault references and check the model backend' },
   { name: 'config export', usage: 'config export --out <path> [--config path]', help: 'write a resolved, owner-only config for a remote run' },
-  { name: 'doctor', usage: 'doctor [--config path]', help: 'check the config and vault references, the Blender MCP bridge (handshake + code probe) and the browser layer (Weles MCP tools); exits 1 when any check fails' },
+  { name: 'doctor', usage: 'doctor [--config path]', help: 'check the config and vault references, the Blender MCP bridge (handshake + code probe) and the declared browser layer (its MCP server and tools); exits 1 when any check fails' },
   { name: 'setup', usage: 'setup [--check] [--dry-run]', help: 'provision Blender, uv and the MCP for Blender addon; --check inspects tools only' },
 ];
 
-const WIDTH = 34;
+/** Each row is the usage, then its help on the next line, one level deeper. */
+const USAGE_INDENT = '  ';
+const HELP_INDENT = '      ';
 
 function rows(commands) {
-  return commands.map((command) =>
-    command.usage.length < WIDTH - 2
-      ? `  ${command.usage.padEnd(WIDTH)}${command.help}`
-      : `  ${command.usage}\n${''.padEnd(WIDTH + 2)}${command.help}`,
-  );
+  return commands.map((command) => `${USAGE_INDENT}${command.usage}\n${HELP_INDENT}${command.help}`);
 }
 
 const BOUNDARIES = `credentials come from role:// references in the config, answered by
 stado credentials get --role or, without Stado, by the owner-only file GLINA_CREDENTIALS_FILE names;
 models come from models.brama or, without Brama, models.openai_compatible;
-browser automation goes only through the Weles MCP server;
+browser automation goes through browser.weles (the Weles MCP server) or, without Weles,
+browser.playwright_mcp (the Playwright MCP server);
 Blender work goes only through the Blender MCP server.`;
 
 export const USAGE = `usage: glina <command> [args] [--text]
@@ -104,8 +108,7 @@ export function commandHelp(name) {
     const [word] = command.name.split(' ');
     return word === name;
   });
-  if (own.length === 0) return USAGE;
+  if (!own.length) return USAGE;
   const usage = own.map((command) => `usage: glina ${command.usage} [--text]`).join('\n');
   return `${usage}\n\n${rows(own).join('\n')}\n\n${BOUNDARIES}`;
 }
-

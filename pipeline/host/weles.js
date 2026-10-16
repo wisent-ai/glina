@@ -1,54 +1,71 @@
-// weles.js — browser access for the pipeline, ONLY through the Weles MCP API.
+// weles.js — the pipeline's MCP stdio client, and browser access through the
+// Weles MCP server.
 //
 // The pipeline never launches its own browser and never touches a local
-// browser profile (no Chrome cookie DBs, no user-data-dir scraping). All
-// page automation goes through the Weles MCP stdio server, whose tool
-// surface is:
+// browser profile (no Chrome cookie DBs, no user-data-dir scraping). With
+// browser.weles, page automation goes through the Weles MCP stdio server,
+// whose tool surface is:
 //
 //   weles_browser_start / weles_browser_close
 //   weles_page_new / weles_page_goto / weles_page_text
 //   weles_page_click / weles_page_fill / weles_page_screenshot / weles_page_evaluate
 //
-// This module is a minimal JSON-RPC 2.0 stdio client plus a session
-// wrapper that owns one browser slot end-to-end.
+// Weles answers every tool with one text item: a JSON object for ids, the
+// page text as it is for weles_page_text, and the JSON of the value for
+// weles_page_evaluate. A reply of any other shape is an error that quotes it.
+//
+// McpStdioClient is the JSON-RPC 2.0 client every MCP server here is spoken
+// to with (Weles, the Playwright MCP server, the Blender MCP server); its
+// errors name the program it started.
 
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
 
+/** The program that starts the Weles MCP server when browser.weles names none. */
+const WELES_MCP = 'weles-mcp';
+
 export class WelesError extends Error {
-  constructor(message, { code, cause } = {}) {
+  /** @param {string} message @param {{code?: number, cause?: Error}} details */
+  constructor(message, details) {
     super(message);
     this.name = 'WelesError';
-    this.code = code;
-    this.cause = cause;
+    this.code = details.code;
+    this.cause = details.cause;
   }
 }
 
-/** Low-level JSON-RPC client over a spawned MCP stdio server. */
+/**
+ * Low-level JSON-RPC client over a spawned MCP stdio server.
+ *
+ * `env` is the child's whole environment. Without one the child gets PATH
+ * and HOME only, so no credential of this process leaks through inheritance.
+ */
 export class McpStdioClient {
-  constructor({ command = 'weles-mcp', args = [], env } = {}) {
-    this.command = command;
-    this.args = args;
-    this.env = env;
+  /** @param {{command: string, args?: string[], env?: object}} server */
+  constructor(server) {
+    if (typeof server.command !== 'string' || !server.command) {
+      throw new WelesError(`an MCP server needs the program that starts it, got ${JSON.stringify(server.command)}`, {});
+    }
+    this.command = server.command;
+    this.args = server.args;
+    this.env = server.env === undefined ? { PATH: process.env.PATH, HOME: process.env.HOME } : server.env;
+    this.label = `MCP server ${server.command}`;
     this.process = null;
-    this.nextId = 1;
     this.pending = new Map();
   }
 
   async start() {
     if (this.process) return;
-    // The pipeline's own secrets stay in this process — the MCP child
-    // gets a scrubbed environment (PATH/HOME only) so no credential can
-    // leak through env inheritance either.
     this.process = spawn(this.command, this.args, {
-      env: this.env ?? { PATH: process.env.PATH, HOME: process.env.HOME },
+      env: this.env,
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     this.process.on('error', (error) => {
-      this._failAll(new WelesError(`weles MCP process failed to start: ${error.message}`, { cause: error }));
+      this._failAll(new WelesError(`${this.label} process failed to start: ${error.message}`, { cause: error }));
     });
-    this.process.on('exit', (code) => {
-      this._failAll(new WelesError(`weles MCP process exited (code ${code})`));
+    this.process.on('exit', (code, signal) => {
+      this._failAll(new WelesError(`${this.label} process exited (code ${code}, signal ${signal})`, {}));
     });
     const rl = readline.createInterface({ input: this.process.stdout });
     rl.on('line', (line) => this._onLine(line));
@@ -66,18 +83,22 @@ export class McpStdioClient {
     let message;
     try {
       message = JSON.parse(trimmed);
-    } catch {
-      return; // non-JSON noise on stdout — the server should not emit any
+    } catch (parseError) {
+      // stdout is the JSON-RPC stream; a line that is not JSON is the server
+      // breaking the protocol, so it is said instead of dropped
+      process.stderr.write(`glina: ${this.label} wrote a line that is not JSON-RPC (${parseError.message}): ${trimmed}\n`);
+      return;
     }
-    const { id, result, error } = message;
-    if (id === undefined || id === null) return;
-    const entry = this.pending.get(id);
-    if (!entry) return;
-    this.pending.delete(id);
-    if (error) {
-      entry.reject(new WelesError(error.message ?? 'weles MCP error', { code: error.code }));
+    const entry = this.pending.get(message.id);
+    if (entry === undefined) return;
+    this.pending.delete(message.id);
+    if (message.error) {
+      entry.reject(new WelesError(
+        `${this.label} answered error ${message.error.code}: ${message.error.message}`,
+        { code: message.error.code },
+      ));
     } else {
-      entry.resolve(result);
+      entry.resolve(message.result);
     }
   }
 
@@ -85,14 +106,13 @@ export class McpStdioClient {
     this.process.stdin.write(`${JSON.stringify(message)}\n`);
   }
 
-  _notify(method, params) {
-    this._send({ jsonrpc: '2.0', method, ...(params ? { params } : {}) });
+  _notify(method) {
+    this._send({ jsonrpc: '2.0', method });
   }
 
   _request(method, params) {
-    if (!this.process) return Promise.reject(new WelesError('MCP client not started'));
-    const id = this.nextId;
-    this.nextId += 1;
+    if (!this.process) return Promise.reject(new WelesError(`${this.label} is not started`, {}));
+    const id = randomUUID();
     // No deadline: a request settles with the server's answer, or with the
     // process `error`/`exit` that `_failAll` turns into a named WelesError.
     return new Promise((resolve, reject) => {
@@ -109,31 +129,34 @@ export class McpStdioClient {
     this.process = null;
   }
 
-  /** Call an MCP tool and unwrap its text content. */
-  async callTool(name, args = {}) {
+  /** Call an MCP tool; a reply flagged isError is thrown with its content. */
+  async callTool(name, args) {
     const result = await this._request('tools/call', { name, arguments: args });
-    if (result?.isError) {
-      const text = result.content?.map((c) => c.text ?? '').join('\n');
-      throw new WelesError(`weles tool ${name} failed: ${text || 'unknown error'}`);
+    if (result.isError) {
+      throw new WelesError(`${this.label} tool ${name} failed: ${JSON.stringify(result.content)}`, {});
     }
     return result;
   }
 
   async listTools() {
     const result = await this._request('tools/list', {});
-    return result?.tools ?? [];
+    if (!Array.isArray(result.tools)) {
+      throw new WelesError(`${this.label} answered tools/list without a tools list: ${JSON.stringify(result)}`, {});
+    }
+    return result.tools;
   }
 
   async close() {
     if (!this.process) return;
-    try {
-      this.process.stdin.end();
-      this.process.kill('SIGTERM');
-    } catch {
-      // already gone
-    }
+    this.process.stdin.end();
+    this.process.kill('SIGTERM');
     this.process = null;
   }
+}
+
+/** How the Weles MCP server is started: browser.weles's command and args. */
+export function welesServer(settings) {
+  return { command: settings.command === undefined ? WELES_MCP : settings.command, args: settings.args };
 }
 
 /**
@@ -142,25 +165,22 @@ export class McpStdioClient {
  * Usage:
  *   const session = await WelesBrowserSession.start({ headless: true });
  *   const page = await session.newPage();
- *   await page.goto('https://example.com');
+ *   await page.goto('https://studio.example/login');
  *   await page.fill('#email', email);
  *   await page.click('button[type=submit]');
  *   await session.close();
  */
 export class WelesBrowserSession {
-  static async start(options = {}) {
-    const client = new McpStdioClient({
-      command: options.command ?? 'weles-mcp',
-      args: options.args ?? [],
-      env: options.env,
-    });
+  /** @param {{command?: string, args?: string[], env?: object, headless?: boolean, browser?: string}} options */
+  static async start(options) {
+    const client = new McpStdioClient({ ...welesServer(options), env: options.env });
     await client.start();
     const session = new WelesBrowserSession(client);
     const launch = {};
     if (options.headless !== undefined) launch.headless = options.headless;
-    if (options.browser) launch.browser = options.browser;
+    if (options.browser !== undefined) launch.browser = options.browser;
     const result = await client.callTool('weles_browser_start', launch);
-    session.browserId = result?.browserId ?? result?.browser_id ?? extractId(result);
+    session.browserId = replyField(result, 'browserId');
     return session;
   }
 
@@ -171,7 +191,7 @@ export class WelesBrowserSession {
 
   async newPage() {
     const result = await this.client.callTool('weles_page_new', { browserId: this.browserId });
-    const pageId = result?.pageId ?? result?.page_id ?? extractId(result);
+    const pageId = replyField(result, 'pageId');
     return new WelesPage(this.client, pageId);
   }
 
@@ -192,13 +212,12 @@ export class WelesPage {
     this.pageId = pageId;
   }
 
-  async goto(url, options = {}) {
-    return this.client.callTool('weles_page_goto', { pageId: this.pageId, url, ...options });
+  async goto(url) {
+    return this.client.callTool('weles_page_goto', { pageId: this.pageId, url });
   }
 
   async text() {
-    const result = await this.client.callTool('weles_page_text', { pageId: this.pageId });
-    return result?.text ?? result?.content?.map((c) => c.text ?? '').join('') ?? '';
+    return replyText(await this.client.callTool('weles_page_text', { pageId: this.pageId }));
   }
 
   async click(selector) {
@@ -213,20 +232,46 @@ export class WelesPage {
     return this.client.callTool('weles_page_screenshot', { pageId: this.pageId, path });
   }
 
+  /** The value of `expression` in the page, from the JSON Weles answers. */
   async evaluate(expression) {
-    const result = await this.client.callTool('weles_page_evaluate', {
-      pageId: this.pageId,
-      expression,
-    });
-    return result?.value ?? result?.text ?? result;
+    const result = await this.client.callTool('weles_page_evaluate', { pageId: this.pageId, expression });
+    return replyJson(result);
   }
 }
 
-function extractId(result) {
-  const text = result?.content?.map((c) => c.text ?? '').join('\n') ?? '';
-  const match = /"(?:browser|page)(?:_?[Ii]d)?"\s*:\s*"?(\d+)"?/.exec(text);
-  if (match) return Number(match[1]);
-  const bare = /(\d+)/.exec(text);
-  if (bare) return Number(bare[1]);
-  throw new WelesError(`could not parse id from weles MCP reply: ${text}`);
+/** The one text item a Weles reply carries; any other shape is an error naming it. */
+function replyText(result) {
+  const content = result.content;
+  if (!Array.isArray(content)) {
+    throw new WelesError(`weles MCP reply has no content: ${JSON.stringify(result)}`, {});
+  }
+  const [item, ...extra] = content;
+  if (item === undefined || extra.length || typeof item.text !== 'string') {
+    throw new WelesError(`weles MCP reply is not one text item: ${JSON.stringify(result)}`, {});
+  }
+  return item.text;
+}
+
+function replyJson(result) {
+  const text = replyText(result);
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new WelesError(`weles MCP reply is not JSON (${error.message}): ${text}`, { cause: error });
+  }
+}
+
+/**
+ * The `field` of a Weles MCP tool reply: Weles answers with one text item
+ * holding a JSON object (`{"browserId":"browser-1"}`). A reply without that
+ * field is an error naming the reply; guessing a number out of its text sent
+ * a browser id Weles never issued.
+ */
+function replyField(result, field) {
+  const reply = replyJson(result);
+  const value = reply === null || typeof reply !== 'object' ? undefined : reply[field];
+  if (typeof value !== 'string' || !value) {
+    throw new WelesError(`weles MCP reply carries no ${field}: ${JSON.stringify(reply)}`, {});
+  }
+  return value;
 }

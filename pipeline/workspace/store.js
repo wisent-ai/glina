@@ -89,16 +89,35 @@ export async function writeWorkspace(workspace) {
     await handle.writeFile(`${JSON.stringify(workspace, null, 2)}\n`);
     await handle.sync();
   } catch (error) {
-    await handle.close().catch(() => {});
-    await rm(temporary, { force: true }).catch(() => {});
-    throw error;
+    throw await withCleanup(error, [
+      () => handle.close(),
+      () => rm(temporary, { force: true }),
+    ], temporary);
   }
   await handle.close();
   try {
     await rename(temporary, destination);
   } catch (error) {
-    await rm(temporary, { force: true }).catch(() => {});
-    throw error;
+    throw await withCleanup(error, [() => rm(temporary, { force: true })], temporary);
   }
+}
+
+/**
+ * `error`, after running each cleanup; a cleanup that fails is added to the
+ * error's message, so a temporary file left behind is said instead of dropped.
+ */
+async function withCleanup(error, cleanups, temporary) {
+  const failures = [];
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      failures.push(cleanupError.message);
+    }
+  }
+  if (failures.length) {
+    error.message = `${error.message}; ${temporary} was not cleaned up: ${failures.join('; ')}`;
+  }
+  return error;
 }
 

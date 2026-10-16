@@ -1,15 +1,18 @@
 {
   "browser": {
-    "engine": "chromium",
-    "headless": true
+    "weles": {
+      "engine": "chromium",
+      "headless": true,
+      "_comment": "Weles through weles-mcp. Without Weles replace browser.weles with browser.playwright_mcp: command and args, the program that starts the Playwright MCP server and its arguments."
+    }
   },
   "credentials": {
     "username": "role://text2game-account/login_email",
     "password": "role://text2game-account/login_password"
   },
   "studio": {
-    "loginUrl": "https://hunyuan3d.tencent.com/login",
-    "generateUrl": "https://hunyuan3d.tencent.com/studio",
+    "loginUrl": "https://studio.example.com/login",
+    "generateUrl": "https://studio.example.com/generate",
     "selectors": {
       "loginUser": "input[type=email]",
       "loginPassword": "input[type=password]",
@@ -18,7 +21,7 @@
       "generateSubmit": "button.generate"
     },
     "artifact": {
-      "expression": "document.querySelector('a.download-glb')?.href ?? null"
+      "expression": "document.querySelector('a.download-glb')?.href"
     }
   },
   "models": {
@@ -30,13 +33,8 @@
       "agent_id": "role://glina-agent-auth/id"
     }
   },
-  "llm": {
-    "maxRounds": 12
-  },
   "verify": {
-    "enabled": true,
-    "triTarget": 6000,
-    "triTolerancePct": 100
+    "enabled": true
   },
   "blender": {
     "enabled": false,

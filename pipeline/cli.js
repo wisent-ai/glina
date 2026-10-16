@@ -19,14 +19,14 @@ import { runDoctor } from './host/doctor.js';
 import { provisionBlender } from './host/setup.js';
 import { verifyAsset } from './gate/verify.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
-import { runPreviewCommand } from './preview-command.js';
+import { previewVerb, runPreviewCommand, PREVIEW_RENDERERS } from './preview-command.js';
 import { animatePreset } from './sculpt/animate.js';
 import { buildShowcase } from './sculpt/showcase.js';
 import { DeclarationError, availability } from './rigs/declared.js';
 import { declarationCommand } from './rigs/commands.js';
 import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
 import { activeAssetPath, importAsset, workspaceSummary } from './workspace/assets.js';
-import { removeAsset, selectAsset } from './workspace/manage.js';
+import { ASSET_ACTIONS } from './workspace/manage.js';
 import { DEFAULT_CONFIG, USAGE, commandHelp, parseArgs, render } from "./arguments.js";
 
 async function main() {
@@ -69,7 +69,7 @@ async function main() {
         name: options.name,
         config,
       });
-      if (report && report.status !== 'imported' && report.status !== 'unchanged') {
+      if (report && !report.accepted) {
         process.exitCode = 1;
       }
       return;
@@ -78,7 +78,7 @@ async function main() {
       const source = positional[0];
       const config = await loadOptionalPipelineConfig(configPath, options.config === undefined);
       const report = await importAsset(source, { name: options.name, variantOf: options['variant-of'], config });
-      if (report.status === 'imported' || report.status === 'unchanged') {
+      if (report.accepted) {
         await recordAssetImported(report);
       } else {
         process.exitCode = 1;
@@ -92,11 +92,12 @@ async function main() {
         print(await workspaceSummary());
         return;
       }
-      if ((action === 'select' || action === 'remove') && id) {
-        print(action === 'select' ? await selectAsset(id) : await removeAsset(id));
+      if (Object.hasOwn(ASSET_ACTIONS, action) && id) {
+        print(await ASSET_ACTIONS[action](id));
         return;
       }
-      console.error(`error: workspace takes list, select <id> or remove <id>, not ${positional.join(' ')}`);
+      const actions = Object.keys(ASSET_ACTIONS).map((name) => `${name} <id>`).join(', ');
+      console.error(`error: workspace takes list, ${actions}, not ${positional.join(' ')}`);
       process.exitCode = 2;
       return;
     }
@@ -225,8 +226,8 @@ async function main() {
     }
     case 'preview': {
       const [leaf, path] = positional;
-      if (leaf !== 'anim' && leaf !== 'scene') {
-        console.error(`error: preview takes anim or scene; got ${JSON.stringify(positional)}`);
+      if (!previewVerb(leaf)) {
+        console.error(`error: preview takes ${Object.keys(PREVIEW_RENDERERS).join(' or ')}; got ${JSON.stringify(positional)}`);
         process.exitCode = 2;
         return;
       }

@@ -20,24 +20,24 @@ function assertReference(value, path) {
 }
 
 function assertNoInlineSecrets(config) {
-  if (config?._resolved === true) return;
-  for (const [field, value] of Object.entries(config?.credentials ?? {})) {
+  if (config._resolved === true) return;
+  for (const [field, value] of Object.entries({ ...config.credentials })) {
     assertReference(value, `credentials.${field}`);
   }
-  assertReference(config?.models?.brama?.key, 'models.brama.key');
-  assertReference(config?.models?.brama?.bearer, 'models.brama.bearer');
-  assertReference(config?.models?.openai_compatible?.bearer, 'models.openai_compatible.bearer');
+  assertReference(config.models?.brama?.key, 'models.brama.key');
+  assertReference(config.models?.brama?.bearer, 'models.brama.bearer');
+  assertReference(config.models?.openai_compatible?.bearer, 'models.openai_compatible.bearer');
 }
 
 /**
  * Load + validate + resolve a pipeline config file.
  *
  * Returns the config with every role:// reference replaced by its
- * vault value. Non-secret settings (URLs, selectors, timeouts) pass
- * through verbatim.
+ * vault value. Non-secret settings (URLs, selectors, the browser layer)
+ * pass through verbatim.
  */
-export async function loadPipelineConfig(path, { credentialOptions } = {}) {
-  return resolveConfigSecrets(await readPipelineConfig(path), credentialOptions ?? {});
+export async function loadPipelineConfig(path) {
+  return resolveConfigSecrets(await readPipelineConfig(path), []);
 }
 
 /** Only an absent default file is optional; explicit or malformed config fails. */
@@ -57,14 +57,14 @@ export async function loadOptionalPipelineConfig(path, implicitDefault) {
  * decided by where the value came from, not by what its key is called, so a
  * bearer or an account e-mail resolved from the vault is never printed.
  */
-export async function checkPipelineConfig(path, { credentialOptions } = {}) {
+export async function checkPipelineConfig(path) {
   const config = await readPipelineConfig(path);
-  if (config?._resolved === true) {
+  if (config._resolved === true) {
     throw new CredentialError(
       'resolved handoff files contain inline secrets; check the original config instead',
     );
   }
-  const resolved = await resolveConfigSecrets(config, credentialOptions ?? {});
+  const resolved = await resolveConfigSecrets(config, []);
   buildCompleter(resolved.models);
   return hideReferences(config);
 }
@@ -85,6 +85,9 @@ async function readPipelineConfig(path) {
     config = JSON.parse(raw);
   } catch (error) {
     throw new CredentialError(`pipeline config is not valid JSON: ${path}`, { cause: error });
+  }
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    throw new CredentialError(`pipeline config must be a JSON object: ${path}`);
   }
   assertNoInlineSecrets(config);
   return config;

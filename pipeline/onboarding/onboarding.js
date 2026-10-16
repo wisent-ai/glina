@@ -21,11 +21,22 @@ async function readDefinition() {
   return JSON.parse(await readFile(DEFINITION, 'utf8'));
 }
 
+// Only a missing progress file is a first run. One that cannot be read or is
+// not JSON throws naming the file: read as no progress, the next write
+// replaced it and the operator's onboarding started over.
 async function readProgress() {
+  const file = stateFile();
+  let text;
   try {
-    return JSON.parse(await readFile(stateFile(), 'utf8'));
-  } catch {
-    return null;
+    text = await readFile(file, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw new Error(`onboarding progress ${file} cannot be read: ${error.message}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`onboarding progress ${file} is not JSON: ${error.message}`);
   }
 }
 
@@ -99,7 +110,7 @@ export async function runOnboarding(options = {}) {
       name: options.name,
       config: options.config ?? {},
     });
-    if (report.status === 'imported' || report.status === 'unchanged') {
+    if (report.accepted) {
       await recordAssetImported(report);
       progress = await readProgress();
     }
