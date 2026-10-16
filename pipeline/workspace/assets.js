@@ -24,22 +24,21 @@ async function removeLeftover(file) {
   }
 }
 
+// An asset id names files in the workspace, so it starts with an ASCII letter
+// or digit and holds only letters, digits, dots, underscores and hyphens.
 function validateName(name) {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name)) {
-    return 'asset name must start with an ASCII letter or digit and contain at most 64 letters, digits, dots, underscores, or hyphens';
+  if (!/^[^\W_][\w.-]*$/.test(name)) {
+    return `asset name ${JSON.stringify(name)} must start with an ASCII letter or digit and hold only letters, digits, dots, underscores, or hyphens; name it with --name`;
   }
   return null;
 }
 
 function derivedName(source) {
   const stem = path.basename(source, path.extname(source));
-  const normalized = stem
+  return stem
     .normalize('NFKD')
-    .replace(/[^A-Za-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64)
-    .replace(/-+$/g, '');
-  return normalized || 'asset';
+    .replace(/[\W_]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 async function digestFile(file) {
@@ -58,7 +57,7 @@ function rejected(source, reason, verification) {
     id: null,
     path: null,
     reason,
-    verification: verification ?? null,
+    verification: verification === undefined ? null : verification,
   };
 }
 
@@ -70,8 +69,13 @@ function rejected(source, reason, verification) {
  * the active input, so callers decide on that field rather than on status
  * names.
  */
-export async function importAsset(source, { name, variantOf = null, config = {} } = {}) {
-  const sourceText = String(source ?? '').trim();
+export async function importAsset(source, { name, variantOf: requestedParent, config }) {
+  if (config === undefined) {
+    throw new Error('importAsset needs the pipeline config the import gate verifies against');
+  }
+  // No --variant-of is a base asset; the manifest records that as a null parent.
+  const variantOf = requestedParent === undefined ? null : requestedParent;
+  const sourceText = typeof source === 'string' ? source.trim() : '';
   if (!sourceText) return rejected(sourceText, 'asset import requires a .glb path');
   if (path.extname(sourceText).toLowerCase() !== '.glb') {
     return rejected(sourceText, 'asset import accepts only .glb files');
@@ -100,7 +104,7 @@ export async function importAsset(source, { name, variantOf = null, config = {} 
   const temporary = path.join(assetsDirectory, `.${id}.${process.pid}.${randomUUID()}.incoming.glb`);
   try {
     await copyFile(resolvedSource, temporary, fsConstants.COPYFILE_EXCL);
-    await chmod(temporary, 0o600);
+    await chmod(temporary, fsConstants.S_IRUSR | fsConstants.S_IWUSR);
   } catch (error) {
     await removeLeftover(temporary);
     return rejected(resolvedSource, `asset import could not stage ${resolvedSource}: ${error.message}`);
@@ -231,8 +235,12 @@ export async function activeAssetPath() {
   let attributes;
   try {
     attributes = await stat(asset.path);
-  } catch {
-    throw new Error(`active Glina asset is missing: ${asset.path}; import it again or select another asset`);
+  } catch (error) {
+    // Only an absent file is a missing asset; any other failure is its own cause.
+    if (error.code === 'ENOENT') {
+      throw new Error(`active Glina asset is missing: ${asset.path}; import it again or select another asset`);
+    }
+    throw new Error(`active Glina asset ${asset.path} cannot be inspected: ${error.message}`);
   }
   if (!attributes.isFile()) {
     throw new Error(`active Glina asset is not a file: ${asset.path}; import it again or select another asset`);
