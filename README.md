@@ -170,15 +170,21 @@ Examples of generated assets:
 | macOS app | `wisent-ai/glina-desktop` |
 | Website | `wisent-ai/glina-landing` |
 
-The real CLI lifecycle tests live under `tests/cli/`, `tests/workspace/`,
-`tests/animation/`, `tests/mcp/` and `tests/onboarding/`:
+The real CLI and MCP journeys live under `tests/workspace/`, `tests/animation/`,
+`tests/mcp/`, `tests/onboarding/` and `tests/doctor/`:
 
 ```sh
-node --test tests/cli/*.test.mjs tests/workspace/*.test.mjs tests/animation/declarations.test.mjs tests/mcp/*.test.mjs tests/onboarding/*.test.mjs
+node --test tests/workspace/*.test.mjs tests/animation/declarations.test.mjs tests/mcp/*.test.mjs tests/onboarding/*.test.mjs tests/doctor/*.test.mjs
 ```
 
-These cover the installed-bin shape, workspace, declarations, the MCP verify
-config refusals and the onboarding progress refusal.
+These cover the workspace and its variants, declarations, the MCP verify
+config refusals, the onboarding progress refusals and `glina doctor` against
+a Blender that is not running (it starts the real `uvx mcp-for-blender`
+server, so it needs uv). Each journey keeps its data and state in its own
+directory under `build/tests/`. With `GLINA_TEST_DEFECT` and
+`GLINA_TEST_CRITERION` set on committed source, a passing journey writes a
+criterion report under `build/criterion/`: the revision, the commands with
+their exits and the refusals it observed.
 `tests/preview/scene.test.mjs` and `tests/animation/catalogue.test.mjs`
 exercise live Blender and cannot pass with a disconnected add-on.
 `tests/browser/bridge.test.mjs` checks the browser refusals through
