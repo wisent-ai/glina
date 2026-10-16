@@ -170,17 +170,20 @@ Examples of generated assets:
 | macOS app | `wisent-ai/glina-desktop` |
 | Website | `wisent-ai/glina-landing` |
 
-The real CLI and MCP journeys live under `tests/cli/`, `tests/workspace/`,
-`tests/animation/`, `tests/mcp/`, `tests/onboarding/` and `tests/doctor/`:
+The real CLI and MCP journeys live under `tests/cli/`, `tests/config/`,
+`tests/workspace/`, `tests/animation/`, `tests/mcp/`, `tests/onboarding/` and
+`tests/doctor/`:
 
 ```sh
-node --test tests/cli/*.test.mjs tests/workspace/*.test.mjs tests/animation/declarations.test.mjs tests/mcp/*.test.mjs tests/onboarding/*.test.mjs tests/doctor/*.test.mjs
+node --test tests/cli/*.test.mjs tests/config/*.test.mjs tests/workspace/*.test.mjs tests/animation/declarations.test.mjs tests/mcp/*.test.mjs tests/onboarding/*.test.mjs tests/doctor/*.test.mjs
 ```
 
 These cover the installed shape (`glina` run through a symlink, `--help`,
-JSON and `--text` output, the `config` group and the refusal of the retired
-hyphenated verbs), the workspace and its variants, declarations, the MCP
-verify config refusals, the onboarding progress refusals and `glina doctor`
+JSON and `--text` output, the `config` and `preview` groups and the refusal of
+the retired hyphenated verbs), `config check` resolving role references from
+`GLINA_CREDENTIALS_FILE` and refusing item references and inline secrets, the
+workspace and its variants, declarations, the MCP verify config refusals, the
+onboarding progress refusals and `glina doctor`
 against a Blender that is not running (it starts the real
 `uvx mcp-for-blender` server, so it needs uv). Each journey keeps its data
 and state in its own directory under `build/tests/`. With `GLINA_TEST_DEFECT`

@@ -43,12 +43,19 @@ test('the installed glina runs, prints JSON or text, and groups config and previ
       assert.equal(refused.status, USAGE_ERROR);
       assert.match(refused.stderr, new RegExp(`^unknown command: ${retired}`));
     }
-    const noLeaf = run.refused('config without a leaf', 'config');
-    assert.equal(noLeaf.status, USAGE_ERROR);
-    assert.match(noLeaf.stderr, /config takes check or export --out <path>/);
-    const noOut = run.refused('config export without --out', 'config', 'export');
-    assert.equal(noOut.status, USAGE_ERROR);
-    assert.match(noOut.stderr, /config export requires --out <path>/);
+    const groupHelp = run.runs('config', '--help').stdout;
+    assert.match(groupHelp, /usage: glina config check/);
+    assert.match(groupHelp, /usage: glina config export --out <path>/);
+    for (const [label, words, message] of [
+      ['config without a leaf', ['config'], /config takes check or export --out <path>/],
+      ['config with an unknown leaf', ['config', 'sideways'], /config takes check or export --out <path>/],
+      ['config export without --out', ['config', 'export'], /config export requires --out <path>/],
+      ['preview with an unknown leaf', ['preview', 'sideways'], /preview takes anim or scene/],
+    ]) {
+      const refused = run.refused(label, ...words);
+      assert.equal(refused.status, USAGE_ERROR);
+      assert.match(refused.stderr, message);
+    }
     const unchecked = run.refused('config check of a config without a model backend', 'config', 'check');
     assert.match(unchecked.stderr, /no model backend is configured/);
   } finally {

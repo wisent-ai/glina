@@ -1,24 +1,36 @@
+// A config names each secret by the role its vault item plays
+// (role://<role>/<field>), never by an item. The real `glina config check`
+// resolves role references from the owner-only credentials file
+// GLINA_CREDENTIALS_FILE names and prints each as resolved without its value,
+// leaving the file as written. An item reference (skarbiec://<item>/<field>),
+// an inline secret, a resolved handoff and an unsupported model backend are
+// refused naming the key, with nothing printed on stdout.
+
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { constants } from 'node:fs';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { journey, root } from '../support/journey.mjs';
 
-const root = resolve(import.meta.dirname, '../..');
+const SECRETS = { key: 'signing-value', bearer: 'access-value', agent_id: 'test-agent' };
 
-test('config check resolves supported model credentials and refuses unsupported backends', async () => {
+test('config check resolves role references and refuses item references, inline secrets and unsupported backends', async () => {
   const build = join(root, 'build', 'tests');
   await mkdir(build, { recursive: true });
-  const directory = await mkdtemp(join(build, 'config-'));
-  const configPath = join(directory, 'pipeline.config.json');
-  const credentialsPath = join(directory, 'credentials.json');
-  const run = () => spawnSync(process.execPath, ['pipeline/cli.js', 'config', 'check', '--config', configPath], {
-    cwd: root,
-    env: { ...process.env, GLINA_CREDENTIALS_FILE: credentialsPath },
-    encoding: 'utf8',
-  });
+  const credentials = join(build, `credentials-${process.pid}.json`);
+  const prior = process.env.GLINA_CREDENTIALS_FILE;
+  await writeFile(credentials, JSON.stringify({ test: SECRETS }), { mode: constants.S_IRUSR | constants.S_IWUSR });
+  process.env.GLINA_CREDENTIALS_FILE = credentials;
+  const run = await journey(import.meta.url, 'config-check');
+  const write = (config) => writeFile(run.config, JSON.stringify(config));
+  const refuses = (label, pattern) => {
+    const refused = run.refused(label, 'config', 'check');
+    assert.match(refused.stderr, pattern);
+    assert.equal(refused.stdout, '');
+    for (const value of Object.values(SECRETS)) assert.ok(!refused.stderr.includes(value));
+  };
   try {
-    await writeFile(credentialsPath, JSON.stringify({ test: { key: 'signing-value', bearer: 'access-value', agent_id: 'test-agent' } }), { mode: 0o600 });
     const models = { brama: {
       url: 'https://brama.example',
       key: 'role://test/key',
@@ -26,62 +38,31 @@ test('config check resolves supported model credentials and refuses unsupported 
       agent_id: 'role://test/agent_id',
       model: 'any',
     } };
-    await writeFile(configPath, JSON.stringify({ models }));
-    const accepted = run();
-    assert.equal(accepted.status, 0, accepted.stderr);
+    await write({ models });
+    const accepted = run.runs('config', 'check');
     assert.equal(JSON.parse(accepted.stdout).models.brama.bearer, '<resolved: ok>');
-    assert.deepEqual(JSON.parse(await readFile(configPath, 'utf8')).models, models);
+    for (const value of Object.values(SECRETS)) assert.ok(!accepted.stdout.includes(value));
+    assert.deepEqual(JSON.parse(await readFile(run.config, 'utf8')).models, models);
 
-    await writeFile(configPath, JSON.stringify({ models: { openai_compatible: {
-      url: 'https://provider.example', bearer: 'inline-value', model: 'test',
-    } } }));
-    const inlineBearer = run();
-    assert.equal(inlineBearer.status, 1, inlineBearer.stdout);
-    assert.match(inlineBearer.stderr, /models\.openai_compatible\.bearer.*inline value/);
-    assert.equal(inlineBearer.stdout, '');
+    await write({ models: { brama: { ...models.brama, bearer: 'skarbiec://brama-agent/bearer' } } });
+    refuses('item reference', /models\.brama\.bearer.*role:\/\/<role>\/<field>/);
 
-    await writeFile(configPath, JSON.stringify({ models, credentials: { username: 'inline-value' } }));
-    const inlineUsername = run();
-    assert.equal(inlineUsername.status, 1, inlineUsername.stdout);
-    assert.match(inlineUsername.stderr, /credentials\.username.*inline value/);
-    assert.equal(inlineUsername.stdout, '');
+    await write({ models: { openai_compatible: { url: 'https://provider.example', bearer: 'inline-value', model: 'test' } } });
+    refuses('inline bearer', /models\.openai_compatible\.bearer.*inline value/);
 
-    await writeFile(configPath, JSON.stringify({
-      _resolved: true, models: { openai_compatible: {
-        url: 'https://provider.example', bearer: 'worker-secret', model: 'test',
-      } },
-    }));
-    const handoff = run();
-    assert.equal(handoff.status, 1, handoff.stdout);
-    assert.match(handoff.stderr, /resolved handoff.*check the original config/);
-    assert.equal(handoff.stdout, '');
+    await write({ models, credentials: { username: 'inline-value' } });
+    refuses('inline credential', /credentials\.username.*inline value/);
 
-    await writeFile(configPath, JSON.stringify({ models: { backend: 'openrouter', openrouter: {} } }));
-    const refused = run();
-    assert.equal(refused.status, 1, refused.stdout);
-    assert.match(refused.stderr, /models\.backend|models\.openrouter/);
-    assert.equal(refused.stdout, '');
+    await write({ _resolved: true, models: { openai_compatible: { url: 'https://provider.example', bearer: 'worker-secret', model: 'test' } } });
+    refuses('resolved handoff', /resolved handoff.*check the original config/);
+
+    await write({ models: { backend: 'openrouter', openrouter: {} } });
+    refuses('unsupported backend', /models\.backend, models\.openrouter is not a model backend/);
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    if (prior === undefined) delete process.env.GLINA_CREDENTIALS_FILE;
+    else process.env.GLINA_CREDENTIALS_FILE = prior;
+    await rm(credentials, { force: true });
+    await rm(run.data, { recursive: true, force: true });
   }
-});
-
-test('the config group refuses a missing or unknown leaf and the retired spellings', () => {
-  const glina = (...words) => spawnSync(process.execPath, ['pipeline/cli.js', ...words], { cwd: root, encoding: 'utf8' });
-  const refuses = (words, message) => {
-    const refused = glina(...words);
-    assert.ok(refused.status, `glina ${words.join(' ')} succeeded: ${refused.stdout}`);
-    assert.match(refused.stderr, message);
-  };
-  refuses(['config'], /config takes check or export --out <path>/);
-  refuses(['config', 'sideways'], /config takes check or export --out <path>/);
-  refuses(['config', 'export'], /config export requires --out <path>/);
-  refuses(['preview', 'sideways'], /preview takes anim or scene/);
-  for (const retired of ['check-config', 'export-config', 'preview-anim', 'preview-scene']) {
-    refuses([retired], new RegExp(`unknown command: ${retired}`));
-  }
-  const help = glina('config', '--help');
-  assert.ok(!help.status, help.stderr);
-  assert.match(help.stdout, /usage: glina config check/);
-  assert.match(help.stdout, /usage: glina config export --out <path>/);
+  await run.passed();
 });
