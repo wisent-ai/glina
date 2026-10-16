@@ -76,6 +76,17 @@ export async function journey(testUrl, name) {
       refusals.push({ name: label, args, refusal: `${result.stderr}${result.stdout}`.trim() });
       return result;
     },
+    /** Any program the journey needs to succeed, with the journey's data and state; the finished process. */
+    command(executable, ...args) {
+      return succeeds(executable, args, env);
+    },
+    /** Any program that must be refused, with the journey's data and state; the refusal is observed state. */
+    refusedCommand(label, executable, ...args) {
+      const result = run(executable, args, env);
+      assert.ok(result.status, `${executable} ${args.join(' ')} was accepted: ${result.stdout}`);
+      refusals.push({ name: label, args: [executable, ...args], refusal: `${result.stderr}${result.stdout}`.trim() });
+      return result;
+    },
     /**
      * One exchange with glina-mcp over stdio: initialize, then one tools/call.
      * The server process must exit cleanly; the call's answer is returned as
