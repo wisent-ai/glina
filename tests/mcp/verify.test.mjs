@@ -1,54 +1,39 @@
+// glina_verify_asset over the real glina-mcp server reads its thresholds the
+// way `glina verify` does: a config it was given that is absent or not JSON is
+// an error result naming the file, never the default thresholds; a readable
+// one gates the asset.
+
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
-
-const root = resolve(import.meta.dirname, '../..');
-const build = join(root, 'build', 'tests');
-
-// One tools/call to the real glina-mcp server over stdio; answers the text
-// of its single content block and whether the server marked it an error.
-function verifyOverMcp(args) {
-  const frames = [
-    { jsonrpc: '2.0', id: 'init', method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: 'test' } } },
-    { jsonrpc: '2.0', id: 'verify', method: 'tools/call', params: { name: 'glina_verify_asset', arguments: args } },
-  ];
-  const run = spawnSync(process.execPath, ['pipeline/mcp.js'], {
-    cwd: root,
-    input: frames.map((frame) => `${JSON.stringify(frame)}\n`).join(''),
-    encoding: 'utf8',
-  });
-  assert.ok(!run.status, `glina-mcp exited ${run.status}:\n${run.stderr}`);
-  const answer = run.stdout.trim().split('\n').map((line) => JSON.parse(line)).find((frame) => frame.id === 'verify');
-  assert.ok(answer, `no answer to tools/call:\n${run.stdout}`);
-  const [block] = answer.result.content;
-  return { isError: answer.result.isError === true, text: block.text };
-}
+import { journey, root } from '../support/journey.mjs';
 
 test('MCP verify refuses a config it cannot read and gates with a readable one', async () => {
-  await mkdir(build, { recursive: true });
-  const work = await mkdtemp(join(build, 'mcp-verify-'));
+  const run = await journey(import.meta.url, 'mcp-verify');
   try {
     const asset = join(root, 'assets', 'models', 'smok.glb');
 
-    const missing = verifyOverMcp({ path: asset, config: join(work, 'absent.json') });
-    assert.equal(missing.isError, true);
+    const absent = { path: asset, config: join(run.data, 'absent.json') };
+    const missing = run.mcp('glina_verify_asset', absent);
+    assert.equal(missing.isError, true, missing.text);
     assert.match(missing.text, /absent\.json/);
     assert.match(missing.text, /ENOENT/);
+    run.observed('config file absent', ['glina_verify_asset', JSON.stringify(absent)], missing.text);
 
-    const malformed = join(work, 'malformed.json');
-    await writeFile(malformed, '{ not json');
-    const unparsed = verifyOverMcp({ path: asset, config: malformed });
-    assert.equal(unparsed.isError, true);
-    assert.match(unparsed.text, /malformed\.json|JSON/);
+    const malformedPath = join(run.data, 'malformed.json');
+    await writeFile(malformedPath, '{ not json');
+    const malformed = { path: asset, config: malformedPath };
+    const unparsed = run.mcp('glina_verify_asset', malformed);
+    assert.equal(unparsed.isError, true, unparsed.text);
+    assert.match(unparsed.text, /malformed\.json/);
+    run.observed('config file not JSON', ['glina_verify_asset', JSON.stringify(malformed)], unparsed.text);
 
-    const readable = join(work, 'readable.json');
-    await writeFile(readable, '{}\n');
-    const gated = verifyOverMcp({ path: asset, config: readable });
+    const gated = run.mcp('glina_verify_asset', { path: asset, config: run.config });
     assert.equal(gated.isError, false, gated.text);
     assert.equal(typeof JSON.parse(gated.text).ok, 'boolean');
   } finally {
-    await rm(work, { recursive: true, force: true });
+    await rm(run.data, { recursive: true, force: true });
   }
+  await run.passed();
 });

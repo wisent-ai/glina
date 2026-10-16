@@ -1,44 +1,40 @@
+// Onboarding starts over only when there is no progress file. A progress file
+// that is not JSON, or that cannot be read, refuses the run naming the file
+// and is left exactly as it was, instead of being read as a first run and
+// overwritten.
+
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { constants } from 'node:fs';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { journey } from '../support/journey.mjs';
 
-const root = resolve(import.meta.dirname, '../..');
-const build = join(root, 'build', 'tests');
-
-// Onboarding reads the empty config the test writes, never the checkout's
-// own pipeline.config.json, so a developer's config cannot decide the run.
-function onboarding(state, data, config) {
-  return spawnSync(process.execPath, ['pipeline/cli.js', 'onboarding', '--config', config], {
-    cwd: root,
-    env: { ...process.env, XDG_STATE_HOME: state, XDG_DATA_HOME: data },
-    encoding: 'utf8',
-  });
-}
-
-test('onboarding starts on a missing progress file and refuses one that is not JSON', async () => {
-  await mkdir(build, { recursive: true });
-  const work = await mkdtemp(join(build, 'onboarding-'));
+test('onboarding starts on a missing progress file and refuses one it cannot read', async () => {
+  const run = await journey(import.meta.url, 'onboarding');
+  const file = join(run.data, 'glina', 'onboarding.json');
+  let locked = false;
   try {
-    const config = join(work, 'pipeline.config.json');
-    await writeFile(config, '{}\n');
-    const data = join(work, 'data');
-    const fresh = join(work, 'fresh');
-    const first = onboarding(fresh, data, config);
-    assert.ok(!first.status, `first run failed:\n${first.stderr}`);
-    const started = JSON.parse(await readFile(join(fresh, 'glina', 'onboarding.json'), 'utf8'));
+    run.runs('onboarding');
+    const started = JSON.parse(await readFile(file, 'utf8'));
     assert.equal(started.status, 'in_progress');
 
-    const corrupt = join(work, 'corrupt');
-    const file = join(corrupt, 'glina', 'onboarding.json');
-    await mkdir(join(corrupt, 'glina'), { recursive: true });
     await writeFile(file, '{ not json');
-    const refused = onboarding(corrupt, data, config);
-    assert.ok(refused.status, 'a progress file that is not JSON was read as a first run');
-    assert.match(refused.stderr, /onboarding progress .*onboarding\.json is not JSON/);
+    const corrupt = run.refused('progress file not JSON', 'onboarding');
+    assert.match(corrupt.stderr, /onboarding progress .*onboarding\.json is not JSON/);
     assert.equal(await readFile(file, 'utf8'), '{ not json');
+
+    await writeFile(file, `${JSON.stringify(started)}\n`);
+    await chmod(file, constants.S_IWUSR);
+    locked = true;
+    const unreadable = run.refused('progress file unreadable', 'onboarding');
+    assert.match(unreadable.stderr, /onboarding progress .*onboarding\.json cannot be read: .*EACCES/);
+    await chmod(file, constants.S_IRUSR | constants.S_IWUSR);
+    locked = false;
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), started);
   } finally {
-    await rm(work, { recursive: true, force: true });
+    if (locked) await chmod(file, constants.S_IRUSR | constants.S_IWUSR);
+    await rm(run.data, { recursive: true, force: true });
   }
+  await run.passed();
 });
