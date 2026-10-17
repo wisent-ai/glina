@@ -13,8 +13,8 @@ import { startBrowserSession } from '../browser/bridge.js';
 import { postProcessModel } from '../gate/blender.js';
 import { verifyAsset } from '../gate/verify.js';
 
-/** Where `create` writes the asset when the request names no directory. */
-const DEFAULT_OUT_DIR = 'assets/models';
+/** Where `create` and `sculpt` write the asset when the request names no directory. */
+export const DEFAULT_OUT_DIR = 'assets/models';
 
 export class PipelineError extends Error {
   constructor(message, { step, cause } = {}) {
@@ -153,7 +153,7 @@ async function download(url, config) {
  * joined by hyphens. A prompt with none is refused; the request then names
  * the file itself.
  */
-function slugify(text) {
+export function slugify(text) {
   const slug = text
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, '-')

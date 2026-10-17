@@ -1,25 +1,39 @@
 // llm_blender.js — "Opus wyklepuje w Blenderze": an LLM-driven sculpt loop.
 //
 // The loop: prompt → model writes bpy code → execute through the Blender
-// MCP session → (optionally) attach a viewport screenshot → iterate →
-// export GLB → run the standard verification gate. The model is the
-// brain; every execution still goes through the Blender MCP layer, and
-// the model key comes from Skarbiec like every other secret.
+// MCP session → (when the bridge offers it) attach a viewport screenshot →
+// iterate → export GLB → run the standard verification gate. The model is
+// the brain; every execution still goes through the Blender MCP layer, and
+// the model key comes from Skarbiec like every other secret. Each step is
+// the model's answer under STEP_ANSWER, never JSON searched for in prose.
 
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BlenderSession, releaseSession } from '../gate/blender.js';
-import { buildCompleter, parseJsonFrom, LlmError } from './llm.js';
+import { buildCompleter, LlmError } from './llm.js';
 import { verifyAsset } from '../gate/verify.js';
+import { DEFAULT_OUT_DIR, slugify } from '../show/text2game.js';
 
 export class SculptError extends Error {
-  constructor(message, { round, cause } = {}) {
+  /** `details` is { round, cause } when the failure has them. */
+  constructor(message, details) {
     super(message);
     this.name = 'SculptError';
-    this.round = round;
-    this.cause = cause;
+    this.round = details?.round;
+    this.cause = details?.cause;
   }
 }
+
+/** One step of the loop: what it does, the bpy code to run now, and whether the model is done. */
+const STEP_PROPERTIES = {
+  thought: { type: 'string', description: 'one short sentence — what this step does' },
+  code: { type: 'string', description: 'python bpy code to execute now (empty when done)' },
+  done: { type: 'boolean', description: 'true when the model is complete' },
+};
+const STEP_ANSWER = {
+  name: 'sculpt_step',
+  schema: { type: 'object', additionalProperties: false, required: Object.keys(STEP_PROPERTIES), properties: STEP_PROPERTIES },
+};
 
 // The prompt names the gate's own triangle budget and clip count when the
 // pipeline config's `verify` section states them, so the model aims at what
@@ -45,12 +59,8 @@ IMPORTANT — execution environment constraints (violating these crashes the run
 - Keep each block small and exception-free; an unhandled exception kills
   the session.
 
-Each reply MUST be a single JSON object (no prose around it):
-{
-  "thought": "one short sentence — what this step does",
-  "code": "python bpy code to execute now (may be empty when done)",
-  "done": false
-}
+Each reply is one step: a short thought, the bpy code to execute now, and
+whether the model is done.
 
 Rules:
 - Build with primitives + vertex-level detail; flat shading; assign material
@@ -69,20 +79,20 @@ Rules:
   frames. bpy.data.actions persists between blocks, so you can
   build the rig in one step and keyframe in later steps. The armature does
   not count toward the triangle budget.
-- When the model is complete, reply with done:true and empty code.
+- When the model is complete, answer done true with empty code.
 - Never touch the filesystem except the provided INPUT/OUTPUT paths; never
   import external assets; no network access.`;
 }
 
-/** Build the loop's user messages transcript entry for one round. */
-function roundMessage(round, maxRounds, execResult, screenshot) {
+/** The user message after `done` of `maxRounds` rounds have run. */
+function roundMessage(done, maxRounds, execResult, screenshot) {
   const text = [
-    `Round ${round}/${maxRounds}.`,
-    execResult ? `Execution result: ${execResult}` : 'Start from an empty scene.',
-    'Reply with the next JSON step.',
+    `${done} of ${maxRounds} rounds are done.`,
+    execResult === undefined ? 'The last step ran no code.' : `Execution result: ${execResult}`,
+    'Answer with the next step.',
   ].join(' ');
   const content = [{ type: 'text', text }];
-  if (screenshot?.base64 && screenshot?.mediaType) {
+  if (screenshot) {
     content.push({
       type: 'image',
       source: {
@@ -95,57 +105,61 @@ function roundMessage(round, maxRounds, execResult, screenshot) {
   return { role: 'user', content };
 }
 
-async function tryViewportScreenshot(session, tools) {
-  if (!tools.some((t) => t.name === 'get_viewport_screenshot')) return null;
+/** The viewport as { base64, mediaType }; a bridge that cannot give one is the error. */
+async function viewportScreenshot(session, round) {
+  let result;
   try {
-    const result = await session.client.callTool('get_viewport_screenshot', {});
-    const image = result?.content?.find((c) => c.type === 'image');
-    if (image?.data) {
-      return { base64: image.data, mediaType: image.mimeType ?? 'image/png' };
-    }
+    result = await session.client.callTool('get_viewport_screenshot', {});
   } catch (error) {
-    // The round goes on text-only; the reason it has no viewport is said.
-    console.error(`[sculpt] viewport screenshot failed, this round is text-only: ${error.message}`);
+    throw new SculptError(`the Blender bridge offers get_viewport_screenshot and refused it after round ${round}: ${error.message}`, {
+      round,
+      cause: error,
+    });
   }
-  return null;
+  const image = result?.content?.find((c) => c.type === 'image');
+  if (!image?.data || !image.mimeType) {
+    throw new SculptError(
+      `the Blender bridge answered get_viewport_screenshot after round ${round} without an image and its media type: ${JSON.stringify(result)}`,
+      { round },
+    );
+  }
+  return { base64: image.data, mediaType: image.mimeType };
 }
 
 /**
  * Sculpt one asset with the LLM loop.
  *
- * @param {object} job      { prompt, outDir, filename, maxRounds? }
+ * @param {object} job      { prompt, outDir?, filename?, maxRounds?, maxTokens? }
  * @param {object} config   resolved pipeline config (models + blender + verify)
- * @param {object} [deps]   test seams: { complete, sessionFactory, verify, onRound }
+ * @param {object} [deps]   { complete, sessionFactory, verify, onRound } when the caller supplies them
  * @returns {Promise<{outPath, verification, rounds, transcript: string[]}>}
  */
-export async function sculptWithLlm(job, config, deps = {}) {
-  const complete = deps.complete ?? buildCompleter(config.models ?? {});
-  const sessionFactory = deps.sessionFactory ?? ((opts) => BlenderSession.start(opts));
-  const verify = deps.verify ?? verifyAsset;
+export async function sculptWithLlm(job, config, deps) {
+  const complete = deps?.complete ?? buildCompleter(config.models);
+  const sessionFactory = deps?.sessionFactory ?? ((opts) => BlenderSession.start(opts));
+  const verify = deps?.verify ?? verifyAsset;
   // How many rounds a sculpt may take is the operator's decision: the
   // request's --rounds, or llm.maxRounds in the pipeline config.
   const maxRounds = job.maxRounds ?? config.llm?.maxRounds;
-  if (!Number.isInteger(maxRounds) || maxRounds < 1) {
-    throw new SculptError(
-      'sculpt needs a round cap: pass --rounds <n> or set llm.maxRounds in the pipeline config',
-      { round: 0 },
-    );
+  if (!Number.isInteger(maxRounds) || !(maxRounds >= Number.MIN_VALUE)) {
+    throw new SculptError('sculpt needs a round cap: pass --rounds <n> or set llm.maxRounds in the pipeline config');
   }
   // The reply length a round may take is the config's too.
   const maxTokens = job.maxTokens ?? config.llm?.maxTokens;
   if (!Number.isInteger(maxTokens) || !(maxTokens >= Number.MIN_VALUE)) {
-    throw new SculptError('sculpt needs a reply length: set llm.maxTokens in the pipeline config', { round: 0 });
+    throw new SculptError('sculpt needs a reply length: set llm.maxTokens in the pipeline config');
   }
   const verifyConfig = config.verify;
   if (!verifyConfig) {
-    throw new SculptError('sculpt needs the pipeline config\'s verify section: the gate every sculpt ends in', { round: 0 });
+    throw new SculptError('sculpt needs the pipeline config\'s verify section: the gate every sculpt ends in');
   }
   const SYSTEM_PROMPT = systemPrompt(verifyConfig);
+  const outDir = job.outDir === undefined ? DEFAULT_OUT_DIR : job.outDir;
+  const filename = job.filename === undefined ? `${slugify(job.prompt)}.glb` : job.filename;
 
-  const session = await sessionFactory(config.blender?.mcp ?? {});
+  const session = await sessionFactory(config.blender?.mcp);
   const transcript = [];
-  const requireAnimations =
-    config.verify?.requireAnimations === true || Number(config.verify?.minAnimationClips ?? 0) > 0;
+  const requireAnimations = verifyConfig.requireAnimations === true || Boolean(verifyConfig.minAnimationClips);
   const messages = [
     {
       role: 'user',
@@ -158,29 +172,37 @@ export async function sculptWithLlm(job, config, deps = {}) {
   ];
 
   try {
-    const tools = await session.listTools().catch((error) => {
-      // Without the tool list no round can ask for a viewport screenshot.
-      console.error(`[sculpt] Blender MCP tools could not be listed, sculpting text-only: ${error.message}`);
-      return [];
-    });
-    let exported = false;
-    let rounds = 0;
+    let tools;
+    try {
+      tools = await session.listTools();
+    } catch (error) {
+      throw new SculptError(`the Blender bridge could not list its tools before the first round: ${error.message}`, { cause: error });
+    }
+    // A bridge without the screenshot tool gives text-only rounds by design.
+    const screenshots = tools.some((t) => t.name === 'get_viewport_screenshot');
+    let finished = false;
 
-    for (let round = 1; round <= maxRounds; round += 1) {
-      const reply = await complete({ system: SYSTEM_PROMPT, messages, maxTokens });
-      transcript.push(reply.text);
-      let step;
+    while (!finished && transcript.length < maxRounds) {
+      let reply;
       try {
-        step = parseJsonFrom(reply.text);
+        reply = await complete({ system: SYSTEM_PROMPT, messages, maxTokens, answer: STEP_ANSWER });
       } catch (error) {
-        throw new SculptError(`model reply not usable in round ${round}: ${error.message}`, {
-          round,
+        throw new SculptError(`model reply not usable after ${transcript.length} of ${maxRounds} rounds: ${error.message}`, {
+          round: transcript.length,
           cause: error,
         });
       }
+      transcript.push(reply.text);
+      const round = transcript.length;
+      const step = reply.object;
+      // A provider that does not decode under the schema can still answer
+      // another object; such a step is refused with what it said.
+      if (typeof step.code !== 'string' || typeof step.done !== 'boolean') {
+        throw new SculptError(`round ${round} answered a step without its code text and done flag: ${reply.text}`, { round });
+      }
 
-      let execResult = null;
-      if (typeof step.code === 'string' && step.code.trim()) {
+      let execResult;
+      if (step.code.trim()) {
         try {
           execResult = String(await session.execute(step.code));
         } catch (error) {
@@ -188,10 +210,10 @@ export async function sculptWithLlm(job, config, deps = {}) {
           // A failed block is the model's to repair only while the bridge
           // still answers: ask the bridge itself, and end the run with the
           // cause named when it does not, instead of counting failures.
-          let probeError = null;
-          await session.listTools().catch((probe) => { probeError = probe; });
-          if (probeError) {
-            throw new SculptError(`Blender bridge is down: ${error.message}; the bridge then refused listTools too: ${probeError.message}`, {
+          try {
+            await session.listTools();
+          } catch (probe) {
+            throw new SculptError(`Blender bridge is down: ${error.message}; the bridge then refused listTools too: ${probe.message}`, {
               round,
               cause: error,
             });
@@ -199,52 +221,36 @@ export async function sculptWithLlm(job, config, deps = {}) {
         }
       }
 
-      if (step.done === true) {
-        exported = true;
-        break;
+      finished = step.done;
+      if (!finished) {
+        const screenshot = screenshots ? await viewportScreenshot(session, round) : undefined;
+        messages.push({ role: 'assistant', content: reply.text });
+        messages.push(roundMessage(round, maxRounds, execResult, screenshot));
+        deps?.onRound?.({ round, step, execResult, screenshot: Boolean(screenshot) });
       }
-
-      const screenshot = await tryViewportScreenshot(session, tools);
-      messages.push({ role: 'assistant', content: reply.text });
-      messages.push(roundMessage(round + 1, maxRounds, execResult, screenshot));
-      deps.onRound?.({ round, step, execResult, screenshot: Boolean(screenshot) });
     }
 
-    if (!exported) {
-      throw new SculptError(`model did not finish within ${maxRounds} rounds`, {
-        round: maxRounds,
-      });
+    if (!finished) {
+      throw new SculptError(`model did not finish within ${maxRounds} rounds`, { round: maxRounds });
     }
 
     // ---- export + verify ----
-    const outDir = job.outDir ?? 'assets/models';
     await mkdir(outDir, { recursive: true });
-    const filename = job.filename ?? `${slugify(job.prompt)}.glb`;
     const outPath = join(outDir, filename);
     await session.exportGlb(outPath);
 
     const verification =
-      config.verify?.enabled !== false
+      verifyConfig.enabled !== false
         ? await verify(outPath, {
-            verify: { ...(config.verify ?? {}), throwOnFail: true },
+            verify: { ...verifyConfig, throwOnFail: true },
             blender: config.blender,
           })
         : null;
 
-    return { outPath, verification, rounds, transcript };
+    return { outPath, verification, rounds: transcript.length, transcript };
   } finally {
     await releaseSession(session);
   }
-}
-
-function slugify(text) {
-  return (
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 48) || 'sculpt'
-  );
 }
 
 export { LlmError };

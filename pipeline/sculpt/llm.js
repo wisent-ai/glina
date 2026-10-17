@@ -13,41 +13,58 @@
 // service directory wrote for this machine (~/.stado/forwards/brama.local);
 // the model is always the alias the config names.
 //
-// The transport is one function: complete({ system, messages, maxTokens })
-// → text. Injected as a seam in tests.
+// The transport is one function: complete({ system, messages, maxTokens,
+// answer }) → { text, object, stopReason }. Every reply is one JSON object
+// bound to `answer` ({ name, schema }) by a strict json_schema
+// response_format, never JSON searched for in prose.
 
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+// https://tc39.es/ecma262/#sec-hours-minutes-second-and-milliseconds "msPerSecond = 1000"
+const MS_PER_SECOND = 1000;
+
 export class LlmError extends Error {
-  constructor(message, { status, cause } = {}) {
+  /** `details` is { status, cause } when the failure has them. */
+  constructor(message, details) {
     super(message);
     this.name = 'LlmError';
-    this.status = status;
-    this.cause = cause;
+    this.status = details?.status;
+    this.cause = details?.cause;
   }
 }
 
-/** Build the model transport from a resolved pipeline config. */
-export function buildCompleter(models = {}, { fetchImpl } = {}) {
-  const fetch_ = fetchImpl ?? fetch;
+/**
+ * Build the model transport from a resolved pipeline config. `transport` is
+ * { fetchImpl } when the caller supplies its own fetch.
+ */
+export function buildCompleter(models, transport) {
+  const fetch_ = transport?.fetchImpl ?? fetch;
+  if (models === undefined) {
+    throw new LlmError(
+      'no model backend is configured: declare models.brama, or models.openai_compatible ' +
+        '(url, bearer, model) for a provider without Brama',
+    );
+  }
   const declared = Object.keys(models);
   const unknown = declared.filter((key) => key !== 'brama' && key !== 'openai_compatible');
-  if (unknown.length > 0) {
+  if (unknown.length) {
     throw new LlmError(
       `models.${unknown.join(', models.')} is not a model backend: declare models.brama, ` +
         'or models.openai_compatible for a provider without Brama',
     );
   }
-  if (declared.length !== 1) {
+  const [backend, ...more] = declared;
+  if (!backend) {
     throw new LlmError(
-      declared.length === 0
-        ? 'no model backend is configured: declare models.brama, or models.openai_compatible ' +
-            '(url, bearer, model) for a provider without Brama'
-        : 'both models.brama and models.openai_compatible are declared: keep the one this pipeline uses',
+      'no model backend is configured: declare models.brama, or models.openai_compatible ' +
+        '(url, bearer, model) for a provider without Brama',
     );
+  }
+  if (more.length) {
+    throw new LlmError('both models.brama and models.openai_compatible are declared: keep the one this pipeline uses');
   }
   if (models.openai_compatible) {
     const cfg = models.openai_compatible;
@@ -59,9 +76,9 @@ export function buildCompleter(models = {}, { fetchImpl } = {}) {
   const cfg = { ...declaredBrama, url: bramaUrl(declaredBrama) };
   // x-agent-id + x-agent-timestamp + x-agent-signature =
   // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>"),
-  // mirroring weles' signedRouterHeaders.
+  // mirroring weles' signedRouterHeaders; the timestamp is Unix seconds.
   const sign = (bodyStr) => {
-    const ts = String(Math.floor(Date.now() / 1000));
+    const ts = String(Math.floor(Date.now() / MS_PER_SECOND));
     const bodyHash = createHash('sha256').update(bodyStr).digest('hex');
     const signature = createHmac('sha256', cfg.key)
       .update(`${cfg.agent_id}:${ts}:${bodyHash}`)
@@ -73,7 +90,7 @@ export function buildCompleter(models = {}, { fetchImpl } = {}) {
 
 function requireFields(backend, cfg, fields) {
   const missing = fields.filter((key) => !cfg?.[key]);
-  if (missing.length > 0) {
+  if (missing.length) {
     throw new LlmError(
       `models.${backend} is not configured: models.${backend}.${missing.join(`, models.${backend}.`)} missing ` +
         '(role:// references for secrets, the model alias as text, in pipeline.config.json)',
@@ -85,35 +102,37 @@ function requireFields(backend, cfg, fields) {
 function bramaUrl(cfg) {
   if (cfg.url) return cfg.url;
   const marker = join(homedir(), '.stado', 'forwards', 'brama.local');
-  let published = '';
+  const unset =
+    `no Brama address: models.brama.url is unset and Stado's service directory has written no ${marker} ` +
+    'for this machine (run `stado service directory publish`, or set models.brama.url)';
+  let contents;
   try {
-    published = readFileSync(marker, 'utf8').split('\n')[0].trim();
+    contents = readFileSync(marker, 'utf8');
   } catch (error) {
-    if (error.code !== 'ENOENT') {
-      throw new LlmError(`cannot read ${marker}: ${error.message}`, { cause: error });
-    }
+    if (error.code === 'ENOENT') throw new LlmError(unset, { cause: error });
+    throw new LlmError(`cannot read ${marker}: ${error.message}`, { cause: error });
   }
-  if (!published) {
-    throw new LlmError(
-      `no Brama address: models.brama.url is unset and Stado's service directory has written no ${marker} ` +
-        'for this machine (run `stado service directory publish`, or set models.brama.url)',
-    );
-  }
-  return published;
+  const [published] = contents.split('\n');
+  if (!published.trim()) throw new LlmError(unset);
+  return published.trim();
 }
 
-/** One OpenAI-compatible chat completion per call; `sign` adds the backend's own headers. */
+/**
+ * One OpenAI-compatible chat completion per call, bound to `answer`; `sign`
+ * adds the backend's own headers. A refusal, a reply that is not one JSON
+ * object, or a transport failure is returned as that error, naming what the
+ * backend said (cli.md rule 8).
+ */
 function completer(cfg, fetch_, label, sign) {
   const url = `${cfg.url.replace(/\/+$/, '')}/v1/chat/completions`;
-  return async function complete({ system, messages, maxTokens }) {
+  return async function complete({ system, messages, maxTokens, answer }) {
     if (!Number.isInteger(maxTokens)) throw new LlmError(`${label}: no reply length given: the caller states max_tokens`);
     const bodyStr = JSON.stringify({
       model: cfg.model,
       max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
+      response_format: { type: 'json_schema', json_schema: { name: answer.name, schema: answer.schema, strict: true } },
     });
-    // One request. A refusal, an empty answer or a transport failure is
-    // returned as that error, naming what the backend said (cli.md rule 8).
     let response;
     try {
       response = await fetch_(url, {
@@ -152,71 +171,43 @@ function completer(cfg, fetch_, label, sign) {
         { status: response.status, cause: error },
       );
     }
-    const text = body?.choices?.[0]?.message?.content;
+    if (!Array.isArray(body?.choices)) {
+      throw new LlmError(`${label} HTTP ${response.status} at ${url}: no choices list; response: ${raw}`, { status: response.status });
+    }
+    const [choice] = body.choices;
+    const text = choice?.message?.content;
     if (typeof text !== 'string' || !text.trim()) {
       throw new LlmError(
         `${label} HTTP ${response.status} at ${url}: expected non-empty text at choices[0].message.content; response: ${raw}`,
         { status: response.status },
       );
     }
-    return { text, stopReason: body.choices?.[0]?.finish_reason };
+    let object;
+    try {
+      object = JSON.parse(text);
+    } catch (error) {
+      throw new LlmError(`${label} answered ${answer.name} with text that is not JSON: ${error.message}; text: ${text}`, { cause: error });
+    }
+    if (object === null || typeof object !== 'object' || Array.isArray(object)) {
+      throw new LlmError(`${label} answered ${answer.name} with ${text}, not one JSON object`);
+    }
+    return { text, object, stopReason: choice.finish_reason };
   };
 }
 
-/** Anthropic content-block messages → plain OpenAI messages (images dropped with a note). */
+/**
+ * Anthropic content-block messages → plain OpenAI messages. An image block
+ * becomes a note that a viewport screenshot was taken, because the request
+ * carries text only; any other block type is refused by name.
+ */
 function openAiMessages(messages) {
   return messages.map((message) => {
     if (typeof message.content === 'string') return message;
-    const parts = (message.content ?? []).map((block) => {
+    const parts = message.content.map((block) => {
       if (block.type === 'text') return block.text;
       if (block.type === 'image') return '[viewport screenshot attached]';
-      return '';
+      throw new LlmError(`a ${message.role} message holds a ${JSON.stringify(block.type)} block, which a text-only request cannot carry`);
     });
     return { role: message.role, content: parts.join('\n') };
   });
-}
-
-/** Pull the first JSON object out of a model reply (fences / prose tolerated). */
-export function parseJsonFrom(text) {
-  const fence = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/.exec(text);
-  if (fence) {
-    try {
-      return JSON.parse(fence[1]);
-    } catch (error) {
-      throw new LlmError(`model reply JSON does not parse: ${error.message}`, { cause: error });
-    }
-  }
-  // Balanced-brace scan: the model may emit prose, multiple objects, or a
-  // trailing duplicate — take the first object that actually parses.
-  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let i = start; i < text.length; i += 1) {
-      const ch = text[i];
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (ch === '\\' && inString) {
-        escaped = true;
-        continue;
-      }
-      if (ch === '"') inString = !inString;
-      if (inString) continue;
-      if (ch === '{') depth += 1;
-      if (ch === '}') {
-        depth -= 1;
-        if (depth === 0) {
-          try {
-            return JSON.parse(text.slice(start, i + 1));
-          } catch {
-            break; // try the next '{' further along
-          }
-        }
-        if (depth < 0) break;
-      }
-    }
-  }
-  throw new LlmError(`model reply contained no JSON object: ${text}`);
 }
