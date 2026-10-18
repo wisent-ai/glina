@@ -156,7 +156,7 @@ contracts](https://glina.wisent.com/docs/cli/animate).
 
 ## Verification gate
 
-Every produced `.glb` passes `pipeline/verify.js`: valid glTF container,
+Every produced `.glb` passes `pipeline/gate/verify.js`: valid glTF container,
 mesh/primitive sanity, the triangle budget when the config states
 `verify.triTarget` (with its `verify.triTolerancePct`; a target without a
 tolerance is refused), materials/skins/animation clips and changing animation
