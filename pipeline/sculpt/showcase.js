@@ -1,10 +1,9 @@
 // showcase.js — deterministic reference assets for animation regression.
 //
-// The first LLM-sculpted dragon proved the pipeline but not the art quality:
-// disconnected geometry and weak skinning made it a bad showcase. A showcase
-// is a declared asset (assets/showcases/<name>.json): materials, rigid parts
-// bone-parented to a compact armature, and its keyed actions, built by the one
-// interpreter in ../rigs/interpreter.js.
+// A showcase is a declared asset (assets/showcases/<name>.json): materials,
+// rigid parts bone-parented to a compact armature, and its keyed actions,
+// built by the one interpreter in ../rigs/interpreter.js, so a regression in
+// rigging or animation shows against geometry that is known to be sound.
 
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -23,7 +22,7 @@ export async function buildShowcase({ outputPath, asset, sessionOptions } = {}) 
     await mkdir(directory, { recursive: true });
     outputPath = join(directory, `${asset}-showcase.glb`);
   }
-  const session = await BlenderSession.start(sessionOptions ?? {});
+  const session = await BlenderSession.start(sessionOptions);
   try {
     await session.execute(showcaseProgram(spec));
     await session.exportGlb(outputPath);

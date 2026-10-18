@@ -1,9 +1,9 @@
 // animate.js — deterministic animation presets through Blender MCP.
 //
-// LLM-authored actions can be structurally present yet visually static. A
-// preset is the boring, reproducible repair path: import the GLB, keyframe
-// the explicit poses a declared preset (assets/presets/<name>.json) names,
-// export, then let the normal gate inspect the result.
+// An action a model authors can be structurally present yet visually static.
+// A preset is the reproducible path: import the GLB, keyframe the explicit
+// poses a declared preset (assets/presets/<name>.json) names, export, then
+// let the normal gate inspect the result.
 
 import { BlenderSession, releaseSession } from '../gate/blender.js';
 import { verifyAsset } from '../gate/verify.js';
@@ -16,7 +16,7 @@ export async function animatePreset({ inputPath, outputPath, preset, sessionOpti
   if (!inputPath) throw new AnimateError('inputPath is required');
   if (!outputPath) throw new AnimateError('outputPath is required');
   const spec = await load('preset', preset);
-  const session = await BlenderSession.start(sessionOptions ?? {});
+  const session = await BlenderSession.start(sessionOptions);
   try {
     await session.importModel(inputPath);
     await session.execute(presetProgram(spec));
