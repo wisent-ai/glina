@@ -126,9 +126,10 @@ motions, as many as `verify.minAnimationClips` states). A sculpt needs
 `llm.maxRounds` (or `--rounds`) and `llm.maxTokens` in the pipeline config and
 refuses to start without them; its prompt names the triangle budget only when
 `verify.triTarget` states one. Each round's step (`thought`, the bpy `code` to
-run, `done`) is the model's answer under a strict `json_schema`
-`response_format`, never JSON searched for in prose; a reply that is not one
-such object ends the sculpt with the reply. A bridge whose tools cannot be
+run, `done`) is the arguments of one required function call whose parameters
+are its strict schema, never JSON searched for in prose; an answer without that
+call, or whose arguments are not one such object, ends the sculpt with the
+answer. A bridge whose tools cannot be
 listed, or that offers a viewport screenshot and fails to give one, ends it
 with the bridge's error; a bridge without the screenshot tool gets text-only
 rounds. The asset lands in `--out` (default `assets/models`) under `--filename`

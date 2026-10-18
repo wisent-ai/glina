@@ -14,9 +14,10 @@
 // the model is always the alias the config names.
 //
 // The transport is one function: complete({ system, messages, maxTokens,
-// answer }) → { text, object, stopReason }. Every reply is one JSON object
-// bound to `answer` ({ name, schema }) by a strict json_schema
-// response_format, never JSON searched for in prose.
+// answer }) → { text, object, stopReason }. Every reply is the arguments of
+// one required call of the function `answer` names ({ name, schema }), whose
+// parameters are its strict schema, never JSON searched for in prose; `text`
+// is those arguments as the model wrote them.
 
 import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -118,10 +119,11 @@ function bramaUrl(cfg) {
 }
 
 /**
- * One OpenAI-compatible chat completion per call, bound to `answer`; `sign`
- * adds the backend's own headers. A refusal, a reply that is not one JSON
- * object, or a transport failure is returned as that error, naming what the
- * backend said (cli.md rule 8).
+ * One OpenAI-compatible chat completion per call, answered by one required
+ * call of `answer`; `sign` adds the backend's own headers. A refusal, an
+ * answer without exactly that call, arguments that are not one JSON object,
+ * or a transport failure is returned as that error, naming what the backend
+ * said (cli.md rule 8).
  */
 function completer(cfg, fetch_, label, sign) {
   const url = `${cfg.url.replace(/\/+$/, '')}/v1/chat/completions`;
@@ -131,7 +133,8 @@ function completer(cfg, fetch_, label, sign) {
       model: cfg.model,
       max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
-      response_format: { type: 'json_schema', json_schema: { name: answer.name, schema: answer.schema, strict: true } },
+      tools: [{ type: 'function', function: { name: answer.name, strict: true, parameters: answer.schema } }],
+      tool_choice: { type: 'function', function: { name: answer.name } },
     });
     let response;
     try {
@@ -175,21 +178,23 @@ function completer(cfg, fetch_, label, sign) {
       throw new LlmError(`${label} HTTP ${response.status} at ${url}: no choices list; response: ${raw}`, { status: response.status });
     }
     const [choice] = body.choices;
-    const text = choice?.message?.content;
-    if (typeof text !== 'string' || !text.trim()) {
-      throw new LlmError(
-        `${label} HTTP ${response.status} at ${url}: expected non-empty text at choices[0].message.content; response: ${raw}`,
-        { status: response.status },
-      );
+    const calls = choice?.message?.tool_calls;
+    if (!Array.isArray(calls)) {
+      throw new LlmError(`${label} HTTP ${response.status} at ${url}: answered without calling ${answer.name}; response: ${raw}`, { status: response.status });
     }
+    const [call, ...others] = calls;
+    if (!call || others.length || call.function?.name !== answer.name || typeof call.function.arguments !== 'string') {
+      throw new LlmError(`${label} did not answer by exactly one call of ${answer.name} with arguments text; response: ${raw}`, { status: response.status });
+    }
+    const text = call.function.arguments;
     let object;
     try {
       object = JSON.parse(text);
     } catch (error) {
-      throw new LlmError(`${label} answered ${answer.name} with text that is not JSON: ${error.message}; text: ${text}`, { cause: error });
+      throw new LlmError(`${label} called ${answer.name} with arguments that are not JSON: ${error.message}; arguments: ${text}`, { cause: error });
     }
     if (object === null || typeof object !== 'object' || Array.isArray(object)) {
-      throw new LlmError(`${label} answered ${answer.name} with ${text}, not one JSON object`);
+      throw new LlmError(`${label} called ${answer.name} with ${text}, not one JSON object`);
     }
     return { text, object, stopReason: choice.finish_reason };
   };
