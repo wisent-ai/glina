@@ -133,7 +133,7 @@ function completer(cfg, fetch_, label, sign) {
       model: cfg.model,
       max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
-      tools: [{ type: 'function', function: { name: answer.name, strict: true, parameters: answer.schema } }],
+      tools: [{ type: 'function', function: { name: answer.name, description: `The ${answer.name} answer, as its parameters describe it.`, strict: true, parameters: answer.schema } }],
       tool_choice: { type: 'function', function: { name: answer.name } },
     });
     let response;
