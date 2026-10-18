@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { constants } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { journey, root } from '../support/journey.mjs';
@@ -43,6 +43,14 @@ test('config check resolves role references and refuses item references, inline 
     assert.equal(JSON.parse(accepted.stdout).models.brama.bearer, '<resolved: ok>');
     for (const value of Object.values(SECRETS)) assert.ok(!accepted.stdout.includes(value));
     assert.deepEqual(JSON.parse(await readFile(run.config, 'utf8')).models, models);
+
+    await chmod(credentials, constants.S_IRUSR | constants.S_IWUSR | constants.S_IRGRP);
+    refuses('group-readable credential file', /GLINA_CREDENTIALS_FILE .*group or other users have access/);
+    await chmod(credentials, constants.S_IRUSR | constants.S_IWUSR);
+
+    await writeFile(credentials, JSON.stringify({ test: { ...SECRETS, bearer: '' } }));
+    refuses('empty role field', /role 'test'.*non-empty field 'bearer'.*models\.brama\.bearer/);
+    await writeFile(credentials, JSON.stringify({ test: SECRETS }));
 
     await write({ models: { brama: { ...models.brama, bearer: 'skarbiec://brama-agent/bearer' } } });
     refuses('item reference', /models\.brama\.bearer.*role:\/\/<role>\/<field>/);

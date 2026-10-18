@@ -189,7 +189,8 @@ node --test tests/cli/*.test.mjs tests/config/*.test.mjs tests/workspace/*.test.
 These cover the installed shape (`glina` run through a symlink, `--help`,
 JSON and `--text` output, the `config` and `preview` groups and the refusal of
 the retired hyphenated verbs), `config check` resolving role references from
-`GLINA_CREDENTIALS_FILE` and refusing item references and inline secrets, the
+`GLINA_CREDENTIALS_FILE` and refusing group-readable credential files, empty role
+fields, item references and inline secrets, the
 workspace and its variants, declarations, the MCP verify config refusals, the
 onboarding progress refusals and `glina doctor`
 against a Blender that is not running (it starts the real
