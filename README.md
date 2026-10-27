@@ -199,6 +199,20 @@ and state in its own directory under `build/tests/`. With `GLINA_TEST_DEFECT`
 and `GLINA_TEST_CRITERION` set on committed source, a passing journey writes a
 criterion report under `build/criterion/`: the revision, the commands with
 their exits and the refusals it observed.
+`node --test tests/config/export.test.mjs` checks the real credential handoff:
+resolved role values, a true handoff marker even when the source declares false,
+successful reuse of that handoff through the real CLI loader, unchanged source
+configuration, owner-only final permissions, and refusal to replace a directory
+while preserving its contents and leaving no additional file beside the destination.
+The destination-symlink case requires replacement of the link itself with the
+private handoff while preserving the unrelated target file unchanged.
+A missing credential role must name the role, field
+and configuration path, preserve the previous handoff byte-for-byte and retain
+its owner-only permissions, without leaving an additional file beside it.
+The journey checks command output for credential disclosure and records success
+only after its isolated files are removed. Final permissions alone do not establish
+that intermediate writes were
+private or atomic; that requires separate observation of the export lifecycle.
 `tests/preview/scene.test.mjs` and `tests/animation/catalogue.test.mjs`
 exercise live Blender and cannot pass with a disconnected add-on.
 `tests/browser/bridge.test.mjs` checks the browser refusals through
