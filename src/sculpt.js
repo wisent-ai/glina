@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { addBox, buildAxe, buildArmorDetails, buildCape, buildBodyDetails, buildExtraDetails } from './sculpt-gear.js';
 
-const SEG = 40;
+// A ring encloses an area only with three vertices or more.
+const FEWEST_RING_VERTICES = 3;
 
 const TORSO_RINGS = [
   { y: 0.92, rx: 0.40, rz: 0.26, c: 'pants' },
@@ -72,7 +73,7 @@ function colorOf(palette, name) {
   return palette[name] || palette.skin;
 }
 
-function pushRing(verts, colors, palette, cName, cx, cy, cz, rx, rz, segments = SEG) {
+function pushRing(verts, colors, palette, cName, cx, cy, cz, rx, rz, segments) {
   const startIdx = verts.length / 3;
   const col = colorOf(palette, cName);
   for (let i = 0; i < segments; i++) {
@@ -83,7 +84,7 @@ function pushRing(verts, colors, palette, cName, cx, cy, cz, rx, rz, segments = 
   return startIdx;
 }
 
-function stitchRings(idx, ringA, ringB, segments = SEG) {
+function stitchRings(idx, ringA, ringB, segments) {
   for (let i = 0; i < segments; i++) {
     const j = (i + 1) % segments;
     idx.push(ringA + i, ringA + j, ringB + i);
@@ -91,46 +92,46 @@ function stitchRings(idx, ringA, ringB, segments = SEG) {
   }
 }
 
-function capRing(idx, ringStart, centerIdx, segments = SEG) {
+function capRing(idx, ringStart, centerIdx, segments) {
   for (let i = 0; i < segments; i++) {
     const j = (i + 1) % segments;
     idx.push(ringStart + j, centerIdx, ringStart + i);
   }
 }
 
-function buildTorso(verts, colors, idx, palette) {
-  const starts = TORSO_RINGS.map((r) => pushRing(verts, colors, palette, r.c, 0, r.y, 0, r.rx, r.rz));
-  for (let i = 0; i < starts.length - 1; i++) stitchRings(idx, starts[i], starts[i + 1]);
+function buildTorso(verts, colors, idx, palette, segments) {
+  const starts = TORSO_RINGS.map((r) => pushRing(verts, colors, palette, r.c, 0, r.y, 0, r.rx, r.rz, segments));
+  for (let i = 0; i < starts.length - 1; i++) stitchRings(idx, starts[i], starts[i + 1], segments);
   return starts;
 }
 
-function buildHead(verts, colors, idx, palette) {
-  const starts = HEAD_RINGS.map((r) => pushRing(verts, colors, palette, r.c, 0, r.y, 0.02, r.r, r.r * 0.92));
-  for (let i = 0; i < starts.length - 1; i++) stitchRings(idx, starts[i], starts[i + 1]);
+function buildHead(verts, colors, idx, palette, segments) {
+  const starts = HEAD_RINGS.map((r) => pushRing(verts, colors, palette, r.c, 0, r.y, 0.02, r.r, r.r * 0.92, segments));
+  for (let i = 0; i < starts.length - 1; i++) stitchRings(idx, starts[i], starts[i + 1], segments);
   const topIdx = verts.length / 3;
   verts.push(0, 2.36, 0.02);
   const helmCol = colorOf(palette, 'helmet');
   colors.push(helmCol.r, helmCol.g, helmCol.b);
-  capRing(idx, starts[starts.length - 1], topIdx);
+  capRing(idx, starts[starts.length - 1], topIdx, segments);
   return starts;
 }
 
-function pathRing(verts, colors, palette, node, mirrorX = false) {
+function pathRing(verts, colors, palette, node, mirrorX, segments) {
   const [x, y, z] = node.p;
   const px = mirrorX ? -x : x;
-  return pushRing(verts, colors, palette, node.c, px, y, z, node.r, node.r);
+  return pushRing(verts, colors, palette, node.c, px, y, z, node.r, node.r, segments);
 }
 
-function buildLimb(verts, colors, idx, palette, path, mirrorX, capColorName) {
-  const starts = path.map((n) => pathRing(verts, colors, palette, n, mirrorX));
-  for (let i = 0; i < starts.length - 1; i++) stitchRings(idx, starts[i], starts[i + 1]);
+function buildLimb(verts, colors, idx, palette, path, mirrorX, capColorName, segments) {
+  const starts = path.map((n) => pathRing(verts, colors, palette, n, mirrorX, segments));
+  for (let i = 0; i < starts.length - 1; i++) stitchRings(idx, starts[i], starts[i + 1], segments);
   const tipIdx = verts.length / 3;
   const tip = path[path.length - 1];
   const px = mirrorX ? -tip.p[0] : tip.p[0];
   verts.push(px, tip.p[1] - 0.04, tip.p[2] + 0.04);
   const cc = colorOf(palette, capColorName || tip.c);
   colors.push(cc.r, cc.g, cc.b);
-  capRing(idx, starts[starts.length - 1], tipIdx);
+  capRing(idx, starts[starts.length - 1], tipIdx, segments);
   return starts;
 }
 
@@ -177,17 +178,26 @@ function paletteFor(opts) {
   return { skin, armor, helmet, pants, boot, belt, collar, gauntlet };
 }
 
+/**
+ * The humanoid mesh. `opts.ringSegments` is how many vertices go around every
+ * ring of the body, the axe haft and the shield: the caller's tessellation,
+ * refused by name when it is missing or encloses no area.
+ */
 export function sculptHumanoid(opts = {}) {
+  const segments = opts.ringSegments;
+  if (!Number.isInteger(segments) || segments < FEWEST_RING_VERTICES) {
+    throw new Error(`sculptHumanoid needs opts.ringSegments, the whole number of vertices around each ring (at least ${FEWEST_RING_VERTICES}); got ${JSON.stringify(segments)}`);
+  }
   const palette = paletteFor(opts);
   const verts = []; const colors = []; const idx = [];
-  buildTorso(verts, colors, idx, palette);
-  buildHead(verts, colors, idx, palette);
-  buildLimb(verts, colors, idx, palette, ARM_PATH_LEFT, false, 'gauntlet');
-  buildLimb(verts, colors, idx, palette, ARM_PATH_RIGHT, false, 'gauntlet');
-  buildLimb(verts, colors, idx, palette, LEG_PATH_LEFT, false, 'boot');
-  buildLimb(verts, colors, idx, palette, LEG_PATH_RIGHT, false, 'boot');
+  buildTorso(verts, colors, idx, palette, segments);
+  buildHead(verts, colors, idx, palette, segments);
+  buildLimb(verts, colors, idx, palette, ARM_PATH_LEFT, false, 'gauntlet', segments);
+  buildLimb(verts, colors, idx, palette, ARM_PATH_RIGHT, false, 'gauntlet', segments);
+  buildLimb(verts, colors, idx, palette, LEG_PATH_LEFT, false, 'boot', segments);
+  buildLimb(verts, colors, idx, palette, LEG_PATH_RIGHT, false, 'boot', segments);
   addFaceFeatures(verts, colors, idx, palette, { beard: opts.beard, beardColor: opts.beardColor, eyeGlow: opts.eyeGlow });
-  buildAxe(verts, colors, idx, colorOf(palette, 'belt'), colorOf(palette, 'gauntlet'));
+  buildAxe(verts, colors, idx, colorOf(palette, 'belt'), colorOf(palette, 'gauntlet'), segments);
   buildArmorDetails(verts, colors, idx, palette, opts);
   buildCape(verts, colors, idx, opts);
   buildBodyDetails(verts, colors, idx, palette, opts);
@@ -256,21 +266,15 @@ export function sculptHumanoid(opts = {}) {
     const cy = 1.04;
     const cz = 0.40 - (i === 0 ? 0.04 : 0);
     const start = verts.length / 3;
-    for (let j = 0; j < 24; j++) {
-      const a = (j / 24) * Math.PI * 2;
+    for (let j = 0; j < segments; j++) {
+      const a = (j / segments) * Math.PI * 2;
       verts.push(-0.78 + Math.cos(a) * r * 0.05, cy + Math.sin(a) * r, cz + Math.cos(a) * r);
       const c = i === 3 ? shieldRim : shieldFace;
       colors.push(c.r, c.g, c.b);
     }
     shieldRings.push(start);
   }
-  for (let i = 0; i < shieldRings.length - 1; i++) {
-    for (let j = 0; j < 24; j++) {
-      const k = (j + 1) % 24;
-      idx.push(shieldRings[i] + j, shieldRings[i] + k, shieldRings[i + 1] + j);
-      idx.push(shieldRings[i + 1] + j, shieldRings[i] + k, shieldRings[i + 1] + k);
-    }
-  }
+  for (let i = 0; i < shieldRings.length - 1; i++) stitchRings(idx, shieldRings[i], shieldRings[i + 1], segments);
   // Shield boss — central protrusion
   addBox(verts, colors, idx, shieldRim, -0.78, 1.04, 0.42, 0.025, 0.06, 0.06);
   // Shield emblem — gold cross on the face

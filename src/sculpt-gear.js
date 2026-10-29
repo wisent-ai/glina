@@ -19,9 +19,13 @@ function stitchRings(idx, ringA, ringB, segments) {
   }
 }
 
-export function buildAxe(verts, colors, idx, haftCol, bladeCol) {
+/** The axe; `haftSegments` vertices go around each ring of its haft, as the caller states. */
+export function buildAxe(verts, colors, idx, haftCol, bladeCol, haftSegments) {
+  if (!Number.isInteger(haftSegments) || haftSegments <= 0) {
+    throw new Error(`buildAxe needs haftSegments, the whole number of vertices around each haft ring; got ${JSON.stringify(haftSegments)}`);
+  }
   const HX = 0.70, HY = 1.00, HZ = 0.72;
-  const haftSeg = 12;
+  const haftSeg = haftSegments;
   const haftRings = [];
   for (let i = 0; i <= 6; i++) {
     const t = i / 6;

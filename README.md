@@ -12,6 +12,9 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
 
 - **Runtime art** (`src/`) — procedural THREE.js generation imported by a game:
   `makeBody` / `sculptHumanoid` / `cardArtSvg`. No credentials, no network.
+  Detail is the caller's: `sculptHumanoid({ ringSegments })`,
+  `buildAxe(..., haftSegments)` and `buildBlobBody(skin, accent, surface)` refuse
+  a call that does not state its tessellation and texture sizes.
 - **Authoring pipeline** (`pipeline/`) — AI text→3D generation with strict
   integration rules (below).
 

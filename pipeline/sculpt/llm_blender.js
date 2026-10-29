@@ -141,12 +141,12 @@ export async function sculptWithLlm(job, config, deps) {
   // How many rounds a sculpt may take is the operator's decision: the
   // request's --rounds, or llm.maxRounds in the pipeline config.
   const maxRounds = job.maxRounds ?? config.llm?.maxRounds;
-  if (!Number.isInteger(maxRounds) || !(maxRounds >= Number.MIN_VALUE)) {
+  if (!Number.isInteger(maxRounds) || maxRounds <= 0) {
     throw new SculptError('sculpt needs a round cap: pass --rounds <n> or set llm.maxRounds in the pipeline config');
   }
   // The reply length a round may take is the config's too.
   const maxTokens = job.maxTokens ?? config.llm?.maxTokens;
-  if (!Number.isInteger(maxTokens) || !(maxTokens >= Number.MIN_VALUE)) {
+  if (!Number.isInteger(maxTokens) || maxTokens <= 0) {
     throw new SculptError('sculpt needs a reply length: set llm.maxTokens in the pipeline config');
   }
   const verifyConfig = config.verify;
