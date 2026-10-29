@@ -1,10 +1,7 @@
-// preview.js — animated preview of a GLB's clips, rendered by Blender.
-//
-// Import the model, play one Action across its frame range, render N frames
-// (EEVEE, small square), and assemble a looping GIF. Blender access goes
-// through the same MCP session discipline as everywhere else in the
-// pipeline; GIF assembly prefers ffmpeg and falls back to uv+Pillow so no
-// image library is ever vendored here.
+// preview.js — previews of a GLB rendered by Blender: an animated GIF of one
+// clip, or one framed image on neutral ground. Blender access goes through
+// the MCP session; GIF assembly prefers ffmpeg and falls back to uv+Pillow so
+// no image library is vendored here.
 
 import { mkdir, mkdtemp, readdir, rename, rm, stat } from 'node:fs/promises';
 import { join, dirname, basename, extname } from 'node:path';
@@ -14,14 +11,18 @@ import { workspaceRoot } from '../workspace/store.js';
 
 export class PreviewError extends Error {}
 
+// https://tc39.es/ecma262/#sec-hours-minutes-second-and-milliseconds "msPerSecond = 1000"; Pillow's `duration` is ms.
+const MS_PER_SECOND = 1000;
+
+/** Run `bin`; `{ok, out}` with everything it wrote, or the reason it could not start. */
 function runBin(bin, args) {
   return new Promise((resolve) => {
     const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (out += d));
-    child.on('error', () => resolve({ ok: false }));
-    child.on('close', (code) => resolve({ ok: code === 0, out }));
+    child.on('error', (error) => resolve({ ok: false, out: `${bin} could not be started: ${error.message}` }));
+    child.on('close', (code, signal) => resolve({ ok: code === 0, out: code === 0 ? out : `${bin} exited ${code === null ? `on ${signal}` : `with status ${code}`}: ${out}` }));
   });
 }
 
@@ -40,7 +41,7 @@ export async function assembleGif(framesDir, outPath, fps) {
     '-loop', '0', '-gifflags', gifFlags, outPath,
   ]);
   // Two-pass palette needs the palette to exist first; generate then reuse.
-  if (!attempt.ok || !(await readdirSafeSize(outPath))) {
+  if (!attempt.ok || !(await gifWritten(outPath))) {
     await runBin('ffmpeg', ['-y', '-i', join(framesDir, 'frame_%03d.png'), '-vf', 'palettegen=stats_mode=diff', palette]);
     attempt = await runBin('ffmpeg', [
       '-y', '-framerate', String(fps), '-i', join(framesDir, 'frame_%03d.png'),
@@ -48,7 +49,7 @@ export async function assembleGif(framesDir, outPath, fps) {
       '-loop', '0', '-gifflags', gifFlags, outPath,
     ]);
   }
-  if (attempt.ok && (await readdirSafeSize(outPath))) return { tool: 'ffmpeg' };
+  if (attempt.ok && (await gifWritten(outPath))) return { tool: 'ffmpeg' };
 
   const py = [
     'import glob, os, sys',
@@ -57,23 +58,22 @@ export async function assembleGif(framesDir, outPath, fps) {
     'assert frames, "no frames rendered"',
     // 256 is the GIF format's palette size, the same ceiling ffmpeg's palettegen uses.
     'imgs = [Image.open(f).convert("P", palette=Image.ADAPTIVE, colors=256) for f in frames]',
-    `d, ms = ${JSON.stringify(outPath)}, ${Math.round(1000 / fps)}`,
+    `d, ms = ${JSON.stringify(outPath)}, ${Math.round(MS_PER_SECOND / fps)}`,
     'imgs[0].save(d, save_all=True, append_images=imgs[1:], duration=ms, loop=0, optimize=False, disposal=2)',
     'print("gif-bytes", os.path.getsize(d))',
   ].join('\n');
   const viaUv = await runBin('uv', ['run', '--with', 'pillow', 'python', '-c', py]);
-  if (!viaUv.ok || !(await readdirSafeSize(outPath))) {
-    throw new PreviewError(`GIF assembly failed (ffmpeg and uv+Pillow): ${viaUv.out ?? ''}`.trim());
+  if (!viaUv.ok || !(await gifWritten(outPath))) {
+    throw new PreviewError(`GIF assembly failed: ffmpeg said: ${attempt.out.trim()}; uv+Pillow said: ${viaUv.out.trim()}`);
   }
   return { tool: 'uv+pillow' };
 }
 
-async function readdirSafeSize(p) {
-  const { stat } = await import('node:fs/promises');
+/** Whether a non-empty GIF is at `p`; only a missing file is no GIF. */
+async function gifWritten(p) {
   try {
     return (await stat(p)).size > 0;
   } catch (error) {
-    // Only a missing file is no GIF; any other failure is the cause itself.
     if (error.code === 'ENOENT') return false;
     throw new PreviewError(`the GIF at ${p} cannot be read: ${error.message}`, { cause: error });
   }
@@ -88,20 +88,13 @@ async function readdirSafeSize(p) {
  * @param {object} opts { glbPath, outPath?, clip?, frames?, fps?, sessionOptions? }
  * @returns {Promise<{outPath, clip, frames, fps, tool}>}
  */
-export async function renderAnimationPreview({
-  glbPath,
-  outPath,
-  clip,
-  frames,
-  fps,
-  sessionOptions,
-} = {}) {
+export async function renderAnimationPreview({ glbPath, outPath, clip, frames, fps, sessionOptions } = {}) {
   if (!glbPath) throw new PreviewError('glbPath is required');
-  const session = await BlenderSession.start(sessionOptions ?? {});
   const dir = await mkdtemp(join(dirname(outPath ?? glbPath), '.glina-preview-'));
   const framesDir = join(dir, 'frames');
+  let session;
   try {
-    const { mkdir } = await import('node:fs/promises');
+    session = await BlenderSession.start(sessionOptions ?? {});
     await mkdir(framesDir, { recursive: true });
     await session.importModel(glbPath);
     const code = [
@@ -178,12 +171,12 @@ export async function renderAnimationPreview({
     const result = String(await session.execute(code));
     const rendered = await readdir(framesDir);
     if (!rendered.some((f) => f.startsWith('frame_'))) {
-      throw new PreviewError(`Blender rendered no frames: ${result.slice(-400)}`);
+      throw new PreviewError(`Blender rendered no frames: ${result}`);
     }
     let playback = fps;
     if (playback === undefined) {
       const timing = /clip-timing ([0-9.]+) (\d+)/.exec(result);
-      if (!timing) throw new PreviewError(`Blender did not report the clip's timing: ${result.slice(-400)}`);
+      if (!timing) throw new PreviewError(`Blender did not report the clip's timing: ${result}`);
       playback = Number(timing[1]) / Number(timing[2]);
     }
     const finalOut =
@@ -276,11 +269,14 @@ export async function renderScenePreview({ glbPath, outPath, size, sessionOption
     let rendered;
     try {
       rendered = await stat(temporary);
-    } catch {
-      throw new PreviewError(`Blender produced no scene image at ${temporary}: ${result.slice(-400)}`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw new PreviewError(`the scene image at ${temporary} cannot be read: ${error.message}`, { cause: error });
+      }
+      throw new PreviewError(`Blender produced no scene image at ${temporary}: ${result}`);
     }
     if (!result.includes('rendered-scene') || result.includes('GAC-EXEC-ERROR') || rendered.size === 0) {
-      throw new PreviewError(`Blender scene render failed: ${result.slice(-400)}`);
+      throw new PreviewError(`Blender scene render failed: ${result}`);
     }
     await rename(temporary, finalOut);
     const dimensions = /scene-size (\d+) (\d+)/.exec(result);

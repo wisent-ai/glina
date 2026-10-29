@@ -1,23 +1,25 @@
 // CLI preview inputs share the active workspace choice and optional Blender
 // bridge configuration; the two renderers retain their own output contracts.
+import { countOption, rateOption } from './arguments.js';
 import { loadOptionalPipelineConfig } from './config.js';
 import { renderAnimationPreview, renderScenePreview } from './sculpt/preview.js';
 
 // `glina preview <verb>`: each verb is one renderer, and the verbs the CLI
-// accepts and names in its refusal are this table's keys.
+// accepts and names in its refusal are this table's keys. A number flag that
+// is not one is refused before Blender starts.
 export const PREVIEW_RENDERERS = Object.freeze({
   anim: (file, options, sessionOptions) => renderAnimationPreview({
     glbPath: file,
     outPath: options.out,
     clip: options.clip,
-    frames: options.frames ? Number(options.frames) : undefined,
-    fps: options.fps ? Number(options.fps) : undefined,
+    frames: countOption(options, 'frames'),
+    fps: rateOption(options, 'fps'),
     sessionOptions,
   }),
   scene: (file, options, sessionOptions) => renderScenePreview({
     glbPath: file,
     outPath: options.out,
-    size: options.size === undefined ? undefined : Number(options.size),
+    size: countOption(options, 'size'),
     sessionOptions,
   }),
 });

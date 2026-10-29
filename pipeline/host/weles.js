@@ -21,6 +21,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import readline from 'node:readline';
+import { PACKAGE_VERSION } from './package.js';
 
 /** The program that starts the Weles MCP server when browser.weles names none. */
 const WELES_MCP = 'weles-mcp';
@@ -72,7 +73,7 @@ export class McpStdioClient {
     await this._request('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'glina', version: '1.0.0' },
+      clientInfo: { name: 'glina', version: PACKAGE_VERSION },
     });
     this._notify('notifications/initialized');
   }

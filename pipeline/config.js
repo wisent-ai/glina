@@ -6,9 +6,10 @@
 // be secrets from their spelling. References are resolved only in memory. An
 // `config export` handoff marks its root as already resolved.
 
-import { readFile } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import { isRoleRef, resolveConfigSecrets, CredentialError } from './host/credentials.js';
 import { buildCompleter } from './sculpt/llm.js';
+import { writeOwnerOnly } from './workspace/store.js';
 
 function assertReference(value, path) {
   if (value !== undefined && !isRoleRef(value)) {
@@ -48,6 +49,27 @@ export async function loadOptionalPipelineConfig(path, implicitDefault) {
     if (implicitDefault && error.code === 'ENOENT') return {};
     throw error;
   }
+}
+
+/**
+ * `glina config export`: resolve every reference of the config at `path` and
+ * write the result to `out` as a handoff for a remote run, owner-only from its
+ * first byte, marked `_resolved: true` whatever the source said. Nothing is
+ * written until every reference resolved; a directory at `out` is refused.
+ */
+export async function exportPipelineConfig(path, out) {
+  const config = await loadPipelineConfig(path);
+  let existing;
+  try {
+    existing = await lstat(out);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw new Error(`config export cannot inspect ${out}: ${error.message}`, { cause: error });
+  }
+  if (existing?.isDirectory()) {
+    throw new Error(`config export --out ${out} is a directory; name the file the resolved config is written to`);
+  }
+  await writeOwnerOnly(out, `${JSON.stringify({ ...config, _resolved: true }, null, 2)}\n`);
+  return { out, resolved: true };
 }
 
 /**

@@ -132,7 +132,7 @@ export async function runOnboarding(options = {}) {
     if (report.accepted) {
       await recordAssetImported(report);
     }
-    console.log(JSON.stringify(report, null, INDENT));
+    // The CLI prints the report, as JSON or with --text, like glina import.
     return report;
   }
 

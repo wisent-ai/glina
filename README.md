@@ -190,8 +190,10 @@ node --test tests/cli/*.test.mjs tests/config/*.test.mjs tests/workspace/*.test.
 ```
 
 These cover the installed shape (`glina` run through a symlink, `--help`,
-JSON and `--text` output, the `config` and `preview` groups and the refusal of
-the retired hyphenated verbs), `config check` resolving role references from
+JSON and `--text` output, the `config` and `preview` groups, the refusal of
+the retired hyphenated verbs, and the usage refusals of a flag a command does
+not take, a flag without its value, a flag given twice and a count that is not
+a whole number above zero), `config check` resolving role references from
 `GLINA_CREDENTIALS_FILE` and refusing group-readable credential files, empty role
 fields, item references and inline secrets, the
 workspace and its variants, declarations, the MCP verify config refusals, the
@@ -213,9 +215,9 @@ A missing credential role must name the role, field
 and configuration path, preserve the previous handoff byte-for-byte and retain
 its owner-only permissions, without leaving an additional file beside it.
 The journey checks command output for credential disclosure and records success
-only after its isolated files are removed. Final permissions alone do not establish
-that intermediate writes were
-private or atomic; that requires separate observation of the export lifecycle.
+only after its isolated files are removed. The export writes through an
+owner-only temporary file beside the destination and renames it into place, so
+the handoff is private from its first byte; the journey observes the final file.
 `tests/preview/scene.test.mjs` and `tests/animation/catalogue.test.mjs`
 exercise live Blender and cannot pass with a disconnected add-on.
 `tests/browser/bridge.test.mjs` checks the browser refusals through

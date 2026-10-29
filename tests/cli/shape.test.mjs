@@ -3,7 +3,9 @@
 // by default and as one `path: value` line per field with --text; config and
 // preview are groups whose leaves are words, and the retired hyphenated verbs
 // (check-config, export-config, preview-anim, preview-scene) are unknown
-// commands, refused as usage errors.
+// commands, refused as usage errors. A flag a command does not take, a flag
+// without its value, a flag given twice and a count that is not a whole
+// number above zero are refused as usage errors before anything runs.
 
 import assert from 'node:assert/strict';
 import { mkdir, rm, symlink } from 'node:fs/promises';
@@ -51,9 +53,20 @@ test('the installed glina runs, prints JSON or text, and groups config and previ
       ['config with an unknown leaf', ['config', 'sideways'], /config takes check or export --out <path>/],
       ['config export without --out', ['config', 'export'], /config export requires --out <path>/],
       ['preview with an unknown leaf', ['preview', 'sideways'], /preview takes anim or scene/],
+      ['a flag the command does not take', ['workspace', 'list', '--rounds', '3'],
+        /^error: glina workspace does not take --rounds; it takes --text, --config$/m],
+      ['a flag without its value', ['import', 'assets/models/smok.glb', '--name'],
+        /^error: --name needs a value; glina import --help shows what it takes$/m],
+      ['a flag given twice', ['workspace', 'list', '--text', '--text'],
+        /^error: glina workspace was given --text twice; give it once$/m],
+      ['a frame count that is not a number', ['preview', 'anim', 'assets/models/smok.glb', '--frames', 'many'],
+        /^error: --frames takes a whole number above zero, got "many"$/m],
+      ['a render size of zero', ['preview', 'scene', 'assets/models/smok.glb', '--size', '0'],
+        /^error: --size takes a whole number above zero, got "0"$/m],
     ]) {
       const refused = run.refused(label, ...words);
       assert.equal(refused.status, USAGE_ERROR);
+      assert.equal(refused.stdout, '');
       assert.match(refused.stderr, message);
     }
     const unchecked = run.refused('config check of a config without a model backend', 'config', 'check');

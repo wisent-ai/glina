@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mcp.js — MCP stdio server for game_asset_creator.
+// mcp.js — MCP stdio server for glina (the `glina-mcp` program).
 //
 // Exposes the whole pipeline to MCP clients (agents): asset creation,
 // verification, config check, the doctor. Same wire
@@ -11,6 +11,7 @@ import { checkPipelineConfig, loadOptionalPipelineConfig, loadPipelineConfig } f
 import { runTextToGameJob } from './show/text2game.js';
 import { verifyAsset } from './gate/verify.js';
 import { runDoctor } from './host/doctor.js';
+import { PACKAGE_VERSION, invokedDirectly } from './host/package.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
@@ -20,7 +21,7 @@ const TOOLS = [
   {
     name: 'glina_create_asset',
     description:
-      'Generate one 3D asset end-to-end: login (Skarbiec creds) → text prompt → poll artifact → download GLB → optional Blender postprocess → verification gate. Returns paths + verification report.',
+      'Generate one 3D asset end-to-end: log in to the configured studio with role:// credentials through the declared browser layer → text prompt → wait for the artifact → download GLB → optional Blender postprocess → verification gate. Returns paths + verification report.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -36,7 +37,7 @@ const TOOLS = [
   {
     name: 'glina_verify_asset',
     description:
-      'Run the asset quality gate on a .glb: GLB structure, triangle budget (default ~6k), materials/skins/animations presence, optional Blender render smoke. Returns { ok, errors, stats }.',
+      'Run the asset quality gate on a .glb: GLB structure, the triangle budget when verify.triTarget states one, materials/animations presence, optional Blender render smoke. Returns { ok, errors, stats }.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -58,7 +59,7 @@ const TOOLS = [
   {
     name: 'glina_sculpt',
     description:
-      'LLM-driven Blender sculpting: the model (Opus via Skarbiec-held key or Brama) iteratively writes bpy code, executes it through the Blender MCP session, then exports GLB and runs the verification gate. "Opus wyklepuje" the asset for you.',
+      'LLM-driven Blender sculpting: the model the config declares (models.brama, or models.openai_compatible without Brama) iteratively writes bpy code, executes it through the Blender MCP session, then exports GLB and runs the verification gate.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -162,7 +163,7 @@ async function handle(request) {
     return respond(id, {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: {} },
-      serverInfo: { name: 'glina', version: '1.0.0' },
+      serverInfo: { name: 'glina', version: PACKAGE_VERSION },
     });
   }
   if (method === 'ping') return respond(id, {});
@@ -188,18 +189,20 @@ export async function serve() {
     let request;
     try {
       request = JSON.parse(trimmed);
-    } catch {
-      process.stdout.write(`${JSON.stringify(respondError(null, -32700, 'parse error'))}\n`);
+    } catch (error) {
+      const refusal = respondError(null, -32700, `parse error: ${error.message}`);
+      process.stdout.write(`${JSON.stringify(refusal)}\n`);
       continue;
     }
-    // Notifications (no id) get no reply, except never for unknown methods.
     if (request.id === undefined || request.id === null) continue;
     const response = await handle(request);
     process.stdout.write(`${JSON.stringify(response)}\n`);
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Serve only when node was asked to run this file: an installed `glina-mcp`
+// is a symlink to it, so a comparison of the link's own path served nothing.
+if (invokedDirectly(import.meta.url)) {
   serve().catch((error) => {
     console.error(error);
     process.exitCode = 1;

@@ -8,27 +8,34 @@ export const DEFAULT_CONFIG = new URL('../pipeline.config.json', import.meta.url
 
 const FLAG = '--';
 
-export function parseArgs(argv) {
-  const [command, ...rest] = argv;
-  const positional = [];
-  const options = {};
-  const queue = [...rest];
-  while (queue.length) {
-    const arg = queue.shift();
-    if (arg.startsWith(FLAG)) {
-      const key = arg.slice(FLAG.length);
-      const [next] = queue;
-      // `--text` takes no value, so it never swallows the word after it.
-      if (key !== 'text' && next !== undefined && !next.startsWith(FLAG)) {
-        options[key] = queue.shift();
-      } else {
-        options[key] = true;
-      }
-    } else {
-      positional.push(arg);
-    }
+/** A command line glina refuses before running anything; the CLI exits 2 for it. */
+export class UsageError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'UsageError';
   }
-  return { command, positional, options };
+}
+
+/** The whole number above zero a flag gives, `undefined` when it is absent. */
+export function countOption(options, name) {
+  const value = options[name];
+  if (value === undefined) return undefined;
+  const count = Number(value);
+  if (!Number.isInteger(count) || !(count > 0)) {
+    throw new UsageError(`--${name} takes a whole number above zero, got ${JSON.stringify(value)}`);
+  }
+  return count;
+}
+
+/** The number above zero a flag gives (a rate may be fractional), `undefined` when it is absent. */
+export function rateOption(options, name) {
+  const value = options[name];
+  if (value === undefined) return undefined;
+  const rate = Number(value);
+  if (!Number.isFinite(rate) || !(rate > 0)) {
+    throw new UsageError(`--${name} takes a number above zero, got ${JSON.stringify(value)}`);
+  }
+  return rate;
 }
 
 /** The indentation of the JSON a command prints. */
@@ -63,7 +70,7 @@ export const COMMANDS = [
   { name: 'import', usage: 'import <file.glb> [--name id] [--variant-of base-id] [--config path]', help: 'validate, persist, and activate an asset or a variant of a base' },
   { name: 'workspace', usage: 'workspace [list | select <id> | remove <id>]', help: 'list imported assets and the active input; make one active; or take one out and delete its copy (the source file stays)' },
   { name: 'create', usage: 'create <prompt> [--race r] [--out dir] [--config path]', help: 'studio flow: generate one asset through the browser layer the config declares (browser.weles or browser.playwright_mcp)' },
-  { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'LLM (Opus) iteratively builds the model in Blender' },
+  { name: 'sculpt', usage: 'sculpt <prompt> [--out dir] [--filename f.glb] [--rounds n] [--config path]', help: 'the model the config declares builds the asset in Blender round by round; --rounds or llm.maxRounds caps the rounds' },
   { name: 'preview anim', usage: 'preview anim [file.glb] [--clip name] [--frames n] [--fps n] [--out f.gif] [--config path]', help: 'render an animated GIF of one clip through Blender' },
   { name: 'preview scene', usage: 'preview scene [file.glb] [--out f.png] [--size px] [--config path]', help: 'render the asset on neutral ground in a framed Blender scene' },
   { name: 'animate', usage: 'animate [file.glb] --preset <name> [--out animated.glb] [--config path]', help: "apply a declared preset's visibly moving actions" },
@@ -76,6 +83,76 @@ export const COMMANDS = [
   { name: 'doctor', usage: 'doctor [--config path]', help: 'check the config and vault references, the Blender MCP bridge (handshake + code probe) and the declared browser layer (its MCP server and tools); exits 1 when any check fails' },
   { name: 'setup', usage: 'setup [--check] [--dry-run]', help: 'provision Blender, uv and the MCP for Blender addon; --check inspects tools only' },
 ];
+
+/**
+ * Flags every command accepts, with whether each takes a value: `--text`
+ * prints the same result as text, `--config` names the pipeline config the
+ * commands whose usage lists it read.
+ */
+const GLOBAL_FLAGS = [['text', false], ['config', true]];
+
+/** `--name` with the word after it in a usage row, when the flag takes one. */
+const USAGE_FLAG = /--([a-z][\w-]*)( [^\s\]]+)?/g;
+
+/**
+ * The flags `glina <command> [leaf]` accepts, read from the usage rows the
+ * help prints, so a flag is declared once: `--x value` in a row takes a value,
+ * `[--x]` takes none. `null` when the words name no row (an unknown command or
+ * group leaf), which that command's own refusal answers.
+ */
+function declaredFlags(command, leaf) {
+  const rows = COMMANDS.filter((row) => {
+    const [word, sub] = row.name.split(' ');
+    return word === command && (sub === undefined || sub === leaf);
+  });
+  if (!rows.length) return null;
+  const flags = new Map(GLOBAL_FLAGS);
+  for (const row of rows) {
+    for (const [, name, value] of row.usage.matchAll(USAGE_FLAG)) flags.set(name, value !== undefined);
+  }
+  return flags;
+}
+
+export function parseArgs(argv) {
+  const [command, ...rest] = argv;
+  const [leaf] = rest;
+  const flags = declaredFlags(command, leaf);
+  const grouped = COMMANDS.some((row) => row.name.startsWith(`${command} `));
+  const words = grouped && leaf !== undefined && !leaf.startsWith(FLAG) ? `${command} ${leaf}` : command;
+  const positional = [];
+  const options = {};
+  const queue = [...rest];
+  while (queue.length) {
+    const arg = queue.shift();
+    if (!arg.startsWith(FLAG)) {
+      positional.push(arg);
+      continue;
+    }
+    const key = arg.slice(FLAG.length);
+    if (Object.hasOwn(options, key)) {
+      throw new UsageError(`glina ${words} was given ${arg} twice; give it once`);
+    }
+    const [next] = queue;
+    let takesValue;
+    if (flags === null) {
+      // No row to read: a word after the flag is its value, except after --text.
+      takesValue = key !== 'text' && next !== undefined && !next.startsWith(FLAG);
+    } else if (flags.has(key)) {
+      takesValue = flags.get(key);
+    } else {
+      const known = [...flags.keys()].map((name) => `${FLAG}${name}`).join(', ');
+      throw new UsageError(`glina ${words} does not take ${arg}; it takes ${known}`);
+    }
+    if (!takesValue) {
+      options[key] = true;
+    } else if (next === undefined || next.startsWith(FLAG)) {
+      throw new UsageError(`${arg} needs a value; glina ${command} --help shows what it takes`);
+    } else {
+      options[key] = queue.shift();
+    }
+  }
+  return { command, positional, options };
+}
 
 /** Each row is the usage, then its help on the next line, one level deeper. */
 const USAGE_INDENT = '  ';
@@ -96,6 +173,8 @@ export const USAGE = `usage: glina <command> [args] [--text]
 
 Every command prints its result as JSON; --text prints the same result as
 one path: value line per field. glina <command> --help prints one command.
+A command takes only the flags its usage lists; any other flag, a flag
+without its value or one given twice is a usage error (exit 2).
 
 commands:
 ${rows(COMMANDS).join('\n')}

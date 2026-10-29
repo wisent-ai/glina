@@ -10,12 +10,10 @@
 //              --role` or by the owner-only GLINA_CREDENTIALS_FILE without Stado.
 // Browser:     driven ONLY through the Weles MCP server.
 
-import { realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
-import { checkPipelineConfig, loadOptionalPipelineConfig, loadPipelineConfig } from './config.js';
+import { checkPipelineConfig, exportPipelineConfig, loadOptionalPipelineConfig, loadPipelineConfig } from './config.js';
 import { runTextToGameJob } from './show/text2game.js';
 import { runDoctor } from './host/doctor.js';
+import { invokedDirectly } from './host/package.js';
 import { provisionBlender } from './host/setup.js';
 import { verifyAsset } from './gate/verify.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
@@ -27,7 +25,7 @@ import { declarationCommand } from './rigs/commands.js';
 import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
 import { activeAssetPath, importAsset, workspaceSummary } from './workspace/assets.js';
 import { ASSET_ACTIONS } from './workspace/manage.js';
-import { DEFAULT_CONFIG, USAGE, commandHelp, parseArgs, render } from "./arguments.js";
+import { DEFAULT_CONFIG, USAGE, UsageError, commandHelp, countOption, parseArgs, render } from "./arguments.js";
 
 async function main() {
   const words = process.argv.slice(2);
@@ -69,9 +67,9 @@ async function main() {
         name: options.name,
         config,
       });
-      if (report && !report.accepted) {
-        process.exitCode = 1;
-      }
+      if (report === undefined) return;
+      print(report);
+      if (!report.accepted) process.exitCode = 1;
       return;
     }
     case 'import': {
@@ -113,21 +111,15 @@ async function main() {
         return;
       }
       // Submit-time secret resolution for REMOTE runs (stado): resolves all
-      // role:// refs locally (the vault never leaves this host) and
-      // writes a mode-0600 resolved config the worker consumes directly —
-      // the same owner-only-env-file pattern as `skarbiec resolve --emit`.
-      // Nothing secret is printed.
-      const out = options.out;
-      if (!out) {
+      // role:// refs locally (the vault never leaves this host) and writes
+      // an owner-only resolved config the worker consumes directly. Nothing
+      // secret is printed.
+      if (!options.out) {
         console.error('error: config export requires --out <path>');
         process.exitCode = 2;
         return;
       }
-      const config = await loadPipelineConfig(configPath);
-      const { writeFile, chmod } = await import('node:fs/promises');
-      await writeFile(out, JSON.stringify({ _resolved: true, ...config }, null, 2));
-      await chmod(out, 0o600);
-      print({ out, resolved: true });
+      print(await exportPipelineConfig(configPath, options.out));
       return;
     }
     case 'doctor': {
@@ -171,10 +163,10 @@ async function main() {
           prompt,
           outDir: options.out,
           filename: options.filename,
-          maxRounds: options.rounds ? Number(options.rounds) : undefined,
+          maxRounds: countOption(options, 'rounds'),
         },
         config,
-        { onRound: (r) => console.error(`[round ${r.round}] ${r.step.thought ?? ''}`) },
+        { onRound: (r) => console.error(r.step.thought === undefined ? `[round ${r.round}]` : `[round ${r.round}] ${r.step.thought}`) },
       );
       print({ ...result, transcript: undefined, rounds: result.rounds });
       return;
@@ -250,23 +242,20 @@ async function main() {
   }
 }
 
-// Run main() only when invoked directly, so importing this file does not
-// take over the process. The installed
-// `glina` is a symlink to this file, so both sides are compared after
-// resolving links: comparing the link's own path made every installed
-// command print nothing and exit 0.
-const invokedDirectly = (() => {
-  if (!process.argv[1]) return false;
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-})();
-if (invokedDirectly) {
+// Run main() only when node was asked to run this file (an installed `glina`
+// is a symlink to it), so importing it does not take over the process.
+let direct = false;
+try {
+  direct = invokedDirectly(import.meta.url);
+} catch (error) {
+  console.error(`error: ${error.message}`);
+  process.exitCode = 1;
+}
+if (direct) {
   main().catch((error) => {
     console.error(`error: ${error.message}`);
-    // A name glina has not declared is a usage error, like an unknown command.
-    process.exitCode = error instanceof DeclarationError ? 2 : 1;
+    // A malformed command line or a name glina has not declared is a usage
+    // error, like an unknown command.
+    process.exitCode = error instanceof UsageError || error instanceof DeclarationError ? 2 : 1;
   });
 }

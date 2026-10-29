@@ -2,11 +2,15 @@
 // and how a change to it is written so no reader sees half of one.
 
 import { randomUUID } from 'node:crypto';
+import { constants } from 'node:fs';
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 export const WORKSPACE_SCHEMA = 'glina.workspace.v2';
+
+/** Read and write for the owner, nothing for anyone else. */
+const OWNER_READ_WRITE = constants.S_IRUSR | constants.S_IWUSR;
 
 export function workspaceRoot() {
   const configured = process.env.XDG_DATA_HOME?.trim();
@@ -83,10 +87,21 @@ export async function readWorkspace() {
 export async function writeWorkspace(workspace) {
   const destination = manifestPath();
   await mkdir(path.dirname(destination), { recursive: true });
+  await writeOwnerOnly(destination, `${JSON.stringify(workspace, null, 2)}\n`);
+}
+
+/**
+ * Write `text` to `destination` readable by its owner only, so no reader sees
+ * half of it and nobody else ever reads it: the bytes go to an owner-only
+ * temporary file beside it, created exclusively, and the rename replaces the
+ * destination itself (a symlink there is replaced, its target untouched). A
+ * failed write removes the temporary file, or says it was left.
+ */
+export async function writeOwnerOnly(destination, text) {
   const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`;
-  const handle = await open(temporary, 'wx', 0o600);
+  const handle = await open(temporary, 'wx', OWNER_READ_WRITE);
   try {
-    await handle.writeFile(`${JSON.stringify(workspace, null, 2)}\n`);
+    await handle.writeFile(text);
     await handle.sync();
   } catch (error) {
     throw await withCleanup(error, [
