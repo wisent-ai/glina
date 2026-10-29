@@ -4,6 +4,8 @@
 // and otherwise the next alternative the operator declared — an
 // OpenAI-compatible endpoint, its model and the role of the item holding
 // its key — or refuses naming every alternative's product, route and cause.
+// Stado is the program STADO_BIN names, `stado` when it names none, as for
+// credentials (host/credentials.js).
 
 import { execFileSync } from 'node:child_process';
 
@@ -32,7 +34,8 @@ function named(printed) {
 }
 
 function stado(args) {
-  return execFileSync('stado', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const bin = process.env.STADO_BIN || 'stado';
+  return execFileSync(bin, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 /**
