@@ -9,9 +9,12 @@
 // Credentials come from the pipeline config like everything else (role://
 // references, or the owner-only credentials file that answers them without
 // Stado) — never from env. Exactly one backend is declared. Brama's address
-// is models.brama.url when the config names one, otherwise the address Stado's
-// service directory wrote for this machine (~/.stado/forwards/brama.local);
-// the model is always the alias the config names.
+// is models.brama.url when the config names one; otherwise Stado's capability
+// resolution answers it (`stado capabilities resolve inference --consumer
+// glina`, inference.js), and when Brama does not answer Glina it hands out
+// the alternative the operator declared, asked unsigned for its own model,
+// or refuses naming every alternative it tried. With models.brama the model
+// is the alias the config names.
 //
 // The transport is one function: complete({ system, messages, maxTokens,
 // answer }) → { text, object, stopReason }. Every reply is the arguments of
@@ -20,9 +23,8 @@
 // is those arguments as the model wrote them.
 
 import { createHash, createHmac } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+
+import { InferenceUnreachable, resolveInference } from './inference.js';
 
 // https://tc39.es/ecma262/#sec-hours-minutes-second-and-milliseconds "msPerSecond = 1000"
 const MS_PER_SECOND = 1000;
@@ -74,7 +76,15 @@ export function buildCompleter(models, transport) {
   }
   const declaredBrama = models.brama;
   requireFields('brama', declaredBrama, ['key', 'bearer', 'agent_id', 'model']);
-  const cfg = { ...declaredBrama, url: bramaUrl(declaredBrama) };
+  let url = declaredBrama.url;
+  if (!url) {
+    const served = resolved();
+    if (served.provider !== 'brama') {
+      return completer(served, fetch_, `${served.provider} (answering in Brama's place)`, () => ({}));
+    }
+    url = served.url;
+  }
+  const cfg = { ...declaredBrama, url };
   // x-agent-id + x-agent-timestamp + x-agent-signature =
   // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>"),
   // mirroring weles' signedRouterHeaders; the timestamp is Unix seconds.
@@ -99,23 +109,16 @@ function requireFields(backend, cfg, fields) {
   }
 }
 
-/** models.brama.url, or the address Stado's service directory published for this machine. */
-function bramaUrl(cfg) {
-  if (cfg.url) return cfg.url;
-  const marker = join(homedir(), '.stado', 'forwards', 'brama.local');
-  const unset =
-    `no Brama address: models.brama.url is unset and Stado's service directory has written no ${marker} ` +
-    'for this machine (run `stado service directory publish`, or set models.brama.url)';
-  let contents;
+/** What Stado's capability resolution hands Glina, refused as an LlmError. */
+function resolved() {
   try {
-    contents = readFileSync(marker, 'utf8');
+    return resolveInference();
   } catch (error) {
-    if (error.code === 'ENOENT') throw new LlmError(unset, { cause: error });
-    throw new LlmError(`cannot read ${marker}: ${error.message}`, { cause: error });
+    if (error instanceof InferenceUnreachable) {
+      throw new LlmError(`no Brama address: models.brama.url is unset, and ${error.message}`, { cause: error });
+    }
+    throw error;
   }
-  const [published] = contents.split('\n');
-  if (!published.trim()) throw new LlmError(unset);
-  return published.trim();
 }
 
 /**

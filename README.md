@@ -43,9 +43,12 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
 4. **Model access**: one backend under `models`. `models.brama` is
    [Brama](https://github.com/wisent-ai/brama), the org model router, with
    `key`, `bearer`, `agent_id` and the alias in `model`; requests are signed.
-   Its address is `url` when given, otherwise the one Stado's service
-   directory wrote for this machine in `~/.stado/forwards/brama.local`; with
-   neither the run is refused naming both. Without Brama,
+   Its address is `url` when given; otherwise Glina asks Stado
+   (`stado capabilities resolve inference --consumer glina`), which answers
+   Brama's route for Glina, or, when Brama does not answer, the
+   OpenAI-compatible endpoint the operator declared, asked unsigned for its
+   own model. When no alternative answers, the run is refused naming each
+   one's product, route and cause. Without Brama,
    `models.openai_compatible` names any OpenAI-compatible provider with `url`,
    `bearer` and `model`; requests go unsigned. Any other key, or both at
    once, is refused by name.
