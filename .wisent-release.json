@@ -19,6 +19,11 @@
             "--command-array", "pipeline/arguments.js:COMMANDS", "--mcp-tools", "pipeline/mcp.js"
           ],
           "kind": "lint"
+        },
+        {
+          "name": "source-shapes",
+          "argv": ["node", "tests/shapes.mjs"],
+          "kind": "lint"
         }
       ],
       "build": {

@@ -218,6 +218,14 @@ The journey checks command output for credential disclosure and records success
 only after its isolated files are removed. The export writes through an
 owner-only temporary file beside the destination and renames it into place, so
 the handoff is private from its first byte; the journey observes the final file.
+
+`node tests/shapes.mjs` lists every instance of the code shapes glina has
+repaired once (a catch that binds no error, a rejection handler that drops its
+error, a disguised zero, an entry guard that runs nothing when installed as a
+symlink, an absent value read as zero, a cut reply, a fixed deadline or retry,
+a provider named in code, a vault item named in a config) under `pipeline/`,
+`src/` and `docs/examples/`, and exits 1 when there is any; the release
+manifest runs it as a lint.
 `tests/preview/scene.test.mjs` and `tests/animation/catalogue.test.mjs`
 exercise live Blender and cannot pass with a disconnected add-on.
 `tests/browser/bridge.test.mjs` checks the browser refusals through
