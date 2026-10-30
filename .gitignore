@@ -3,3 +3,4 @@ pipeline.config.json
 *.log
 .DS_Store
 build/
+.build/
