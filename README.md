@@ -40,18 +40,20 @@ Born as the asset pipeline of the browser RTS [Potyczka](https://github.com/lbar
    by name.
 3. **Blender**: only via the MCP for Blender server (`uvx mcp-for-blender`
    default), never hand-rolled sockets.
-4. **Model access**: one backend under `models`. `models.brama` is
-   [Brama](https://github.com/wisent-ai/brama), the org model router, with
-   `key`, `bearer`, `agent_id` and the alias in `model`; requests are signed.
-   Its address is `url` when given; otherwise Glina asks Stado
-   (`stado capabilities resolve inference --consumer glina`), which answers
-   Brama's route for Glina, or, when Brama does not answer, the
-   OpenAI-compatible endpoint the operator declared, asked unsigned for its
-   own model. When no alternative answers, the run is refused naming each
-   one's product, route and cause. Without Brama,
-   `models.openai_compatible` names any OpenAI-compatible provider with `url`,
-   `bearer` and `model`; requests go unsigned. Any other key, or both at
-   once, is refused by name.
+4. **Model access**: one backend under `models`. `models.brama` names the
+   alias in `model`. With `url` it is [Brama](https://github.com/wisent-ai/brama),
+   the org model router, at that address, with `key`, `bearer` and
+   `agent_id`; requests are signed. Without `url`, Glina names no model
+   service and reads no secret for it: each request is handed to
+   `stado capabilities call inference --consumer glina`, which asks the first
+   alternative in Stado's selected order that answers it — Brama, or a
+   statement recorded for that exact request (`stado capabilities attestation
+   record`) — so an alternative Stado adds is used with no change here. When
+   none answers, the run is refused with Stado's sentence naming each one and
+   the command that answers the kept request; `config check` refuses when
+   Stado cannot be read. Without Brama, `models.openai_compatible` names any
+   OpenAI-compatible provider with `url`, `bearer` and `model`; requests go
+   unsigned. Any other key, or both at once, is refused by name.
 
 ## Install
 

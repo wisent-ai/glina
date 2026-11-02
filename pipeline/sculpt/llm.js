@@ -8,13 +8,13 @@
 //                             sent unsigned.
 // Credentials come from the pipeline config like everything else (role://
 // references, or the owner-only credentials file that answers them without
-// Stado) — never from env. Exactly one backend is declared. Brama's address
-// is models.brama.url when the config names one; otherwise Stado's capability
-// resolution answers it (`stado capabilities resolve inference --consumer
-// glina`, inference.js), and when Brama does not answer Glina it hands out
-// the alternative the operator declared, asked unsigned for its own model,
-// or refuses naming every alternative it tried. With models.brama the model
-// is the alias the config names.
+// Stado) — never from env. Exactly one backend is declared. With
+// models.brama.url naming Brama, requests go there signed with key, bearer
+// and agent_id. With no url, Glina names no model service: each request is
+// handed to Stado (`stado capabilities call inference --consumer glina`,
+// inference.js), which asks the first alternative in its selected order that
+// answers it, and only models.brama.model is read. The model is the alias
+// the config names.
 //
 // The transport is one function: complete({ system, messages, maxTokens,
 // answer }) → { text, object, stopReason }. Every reply is the arguments of
@@ -24,7 +24,7 @@
 
 import { createHash, createHmac } from 'node:crypto';
 
-import { InferenceUnreachable, resolveInference } from './inference.js';
+import { callInference, InferenceUnreachable, inferenceOrder } from './inference.js';
 
 // https://tc39.es/ecma262/#sec-hours-minutes-second-and-milliseconds "msPerSecond = 1000"
 const MS_PER_SECOND = 1000;
@@ -72,19 +72,25 @@ export function buildCompleter(models, transport) {
   if (models.openai_compatible) {
     const cfg = models.openai_compatible;
     requireFields('openai_compatible', cfg, ['url', 'bearer', 'model']);
-    return completer(cfg, fetch_, 'the model provider', () => ({}));
+    return completer(cfg, httpPost(fetch_, cfg), 'the model provider', () => ({}));
   }
   const declaredBrama = models.brama;
-  requireFields('brama', declaredBrama, ['key', 'bearer', 'agent_id', 'model']);
-  let url = declaredBrama.url;
-  if (!url) {
-    const served = resolved();
-    if (served.provider !== 'brama') {
-      return completer(served, fetch_, `${served.provider} (answering in Brama's place)`, () => ({}));
+  if (!declaredBrama?.url) {
+    requireFields('brama', declaredBrama, ['model']);
+    // Stado must be there to hand requests to; which alternative answers is
+    // decided per request.
+    try {
+      inferenceOrder();
+    } catch (error) {
+      if (error instanceof InferenceUnreachable) {
+        throw new LlmError(`models.brama.url is unset, so requests go to Stado, and ${error.message}`, { cause: error });
+      }
+      throw error;
     }
-    url = served.url;
+    return completer({ model: declaredBrama.model }, viaStado, 'stado capabilities call', () => ({}));
   }
-  const cfg = { ...declaredBrama, url };
+  requireFields('brama', declaredBrama, ['key', 'bearer', 'agent_id', 'model']);
+  const cfg = declaredBrama;
   // x-agent-id + x-agent-timestamp + x-agent-signature =
   // HMAC-SHA256(agent_auth_secret, "<agentId>:<ts>:<sha256(body)>"),
   // mirroring weles' signedRouterHeaders; the timestamp is Unix seconds.
@@ -96,7 +102,7 @@ export function buildCompleter(models, transport) {
       .digest('hex');
     return { 'x-agent-id': cfg.agent_id, 'x-agent-timestamp': ts, 'x-agent-signature': signature };
   };
-  return completer(cfg, fetch_, 'brama', sign);
+  return completer(cfg, httpPost(fetch_, cfg), 'brama', sign);
 }
 
 function requireFields(backend, cfg, fields) {
@@ -109,45 +115,18 @@ function requireFields(backend, cfg, fields) {
   }
 }
 
-/** What Stado's capability resolution hands Glina, refused as an LlmError. */
-function resolved() {
-  try {
-    return resolveInference();
-  } catch (error) {
-    if (error instanceof InferenceUnreachable) {
-      throw new LlmError(`no Brama address: models.brama.url is unset, and ${error.message}`, { cause: error });
-    }
-    throw error;
-  }
-}
-
 /**
- * One OpenAI-compatible chat completion per call, answered by one required
- * call of `answer`; `sign` adds the backend's own headers. A refusal, an
- * answer without exactly that call, arguments that are not one JSON object,
- * or a transport failure is returned as that error, naming what the backend
- * said (cli.md rule 8).
+ * The request sent to `cfg.url` with its bearer and `headers`: `{ who, body,
+ * raw, status }`, or the LlmError naming what failed.
  */
-function completer(cfg, fetch_, label, sign) {
+function httpPost(fetch_, cfg) {
   const url = `${cfg.url.replace(/\/+$/, '')}/v1/chat/completions`;
-  return async function complete({ system, messages, maxTokens, answer }) {
-    if (!Number.isInteger(maxTokens)) throw new LlmError(`${label}: no reply length given: the caller states max_tokens`);
-    const bodyStr = JSON.stringify({
-      model: cfg.model,
-      max_tokens: maxTokens,
-      messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
-      tools: [{ type: 'function', function: { name: answer.name, description: `The ${answer.name} answer, as its parameters describe it.`, strict: true, parameters: answer.schema } }],
-      tool_choice: { type: 'function', function: { name: answer.name } },
-    });
+  return async (bodyStr, label, headers) => {
     let response;
     try {
       response = await fetch_(url, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${cfg.bearer}`,
-          ...sign(bodyStr),
-        },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.bearer}`, ...headers },
         body: bodyStr,
       });
     } catch (error) {
@@ -177,27 +156,62 @@ function completer(cfg, fetch_, label, sign) {
         { status: response.status, cause: error },
       );
     }
+    return { who: `${label} HTTP ${response.status} at ${url}`, body, raw, status: response.status };
+  };
+}
+
+/** The request handed to Stado's inference alternatives. */
+async function viaStado(bodyStr) {
+  try {
+    const { provider, answer } = await callInference(bodyStr);
+    return { who: `${provider} (through stado capabilities call)`, body: answer, raw: JSON.stringify(answer), status: undefined };
+  } catch (error) {
+    if (error instanceof InferenceUnreachable) {
+      throw new LlmError(`models.brama.url is unset and ${error.message}`, { cause: error });
+    }
+    throw error;
+  }
+}
+
+/**
+ * One chat completion per call, answered by one required call of `answer`;
+ * `send` delivers the request (to the named router, or to Stado) and `sign`
+ * adds the backend's own headers. A refusal, an answer without exactly that
+ * call, arguments that are not one JSON object, or a transport failure is
+ * returned as that error, naming what the backend said (cli.md rule 8).
+ */
+function completer(cfg, send, label, sign) {
+  return async function complete({ system, messages, maxTokens, answer }) {
+    if (!Number.isInteger(maxTokens)) throw new LlmError(`${label}: no reply length given: the caller states max_tokens`);
+    const bodyStr = JSON.stringify({
+      model: cfg.model,
+      max_tokens: maxTokens,
+      messages: [{ role: 'system', content: system }, ...openAiMessages(messages)],
+      tools: [{ type: 'function', function: { name: answer.name, description: `The ${answer.name} answer, as its parameters describe it.`, strict: true, parameters: answer.schema } }],
+      tool_choice: { type: 'function', function: { name: answer.name } },
+    });
+    const { who, body, raw, status } = await send(bodyStr, label, sign(bodyStr));
     if (!Array.isArray(body?.choices)) {
-      throw new LlmError(`${label} HTTP ${response.status} at ${url}: no choices list; response: ${raw}`, { status: response.status });
+      throw new LlmError(`${who}: no choices list; response: ${raw}`, { status });
     }
     const [choice] = body.choices;
     const calls = choice?.message?.tool_calls;
     if (!Array.isArray(calls)) {
-      throw new LlmError(`${label} HTTP ${response.status} at ${url}: answered without calling ${answer.name}; response: ${raw}`, { status: response.status });
+      throw new LlmError(`${who}: answered without calling ${answer.name}; response: ${raw}`, { status });
     }
     const [call, ...others] = calls;
     if (!call || others.length || call.function?.name !== answer.name || typeof call.function.arguments !== 'string') {
-      throw new LlmError(`${label} did not answer by exactly one call of ${answer.name} with arguments text; response: ${raw}`, { status: response.status });
+      throw new LlmError(`${who} did not answer by exactly one call of ${answer.name} with arguments text; response: ${raw}`, { status });
     }
     const text = call.function.arguments;
     let object;
     try {
       object = JSON.parse(text);
     } catch (error) {
-      throw new LlmError(`${label} called ${answer.name} with arguments that are not JSON: ${error.message}; arguments: ${text}`, { cause: error });
+      throw new LlmError(`${who} called ${answer.name} with arguments that are not JSON: ${error.message}; arguments: ${text}`, { cause: error });
     }
     if (object === null || typeof object !== 'object' || Array.isArray(object)) {
-      throw new LlmError(`${label} called ${answer.name} with ${text}, not one JSON object`);
+      throw new LlmError(`${who} called ${answer.name} with ${text}, not one JSON object`);
     }
     return { text, object, stopReason: choice.finish_reason };
   };
