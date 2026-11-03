@@ -26,6 +26,7 @@ import { recordAssetImported, runOnboarding } from './onboarding/onboarding.js';
 import { activeAssetPath, importAsset, workspaceSummary } from './workspace/assets.js';
 import { ASSET_ACTIONS } from './workspace/manage.js';
 import { DEFAULT_CONFIG, USAGE, UsageError, commandHelp, countOption, parseArgs, render } from "./arguments.js";
+import { countPrompt, dismiss as dismissStar, reset as resetStar, starStatus } from './star/star.js';
 
 async function main() {
   const words = process.argv.slice(2);
@@ -57,6 +58,7 @@ async function main() {
         config,
       );
       print(result);
+      await countPrompt();
       return;
     }
     case 'onboarding': {
@@ -169,6 +171,19 @@ async function main() {
         { onRound: (r) => console.error(r.step.thought === undefined ? `[round ${r.round}]` : `[round ${r.round}] ${r.step.thought}`) },
       );
       print({ ...result, transcript: undefined, rounds: result.rounds });
+      await countPrompt();
+      return;
+    }
+    case 'star': {
+      const verbs = { status: starStatus, dismiss: dismissStar, reset: resetStar };
+      const [verb = 'status', extra] = positional;
+      if (!Object.hasOwn(verbs, verb) || extra !== undefined) {
+        const wrong = Object.hasOwn(verbs, verb) ? `unexpected argument ${JSON.stringify(extra)}` : `unknown action ${JSON.stringify(verb)}`;
+        console.error(`error: star: ${wrong}; usage: glina star [status | dismiss | reset]`);
+        process.exitCode = 2;
+        return;
+      }
+      print(await verbs[verb]());
       return;
     }
     case 'showcases':

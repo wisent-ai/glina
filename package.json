@@ -2,6 +2,10 @@
   "name": "@wisent-ai/glina",
   "version": "3.0.0",
   "description": "Glina — your AI sculpts your game assets. Procedural THREE.js runtime art plus an AI text-to-3D pipeline (Brama-modeled Blender sculpting, Weles browser layer, Skarbiec-only credentials) with a GLB quality gate.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wisent-ai/glina.git"
+  },
   "type": "module",
   "main": "src/index.js",
   "exports": {

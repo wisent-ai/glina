@@ -88,7 +88,24 @@ glina showcases [list | add <name> <file.json> | remove <name>]
 glina presets [list | add <name> <file.json> | remove <name>]
 glina setup [--check] [--dry-run]                     # provision Blender, uv and the matching addon
 glina doctor                                         # config, Blender bridge, browser layer; exit 1 on any failure
+glina star [status | dismiss | reset]                # the GitHub star request
 ```
+
+After the fifth successful `create` or `sculpt` (from the CLI, `glina-mcp` or
+Glina Desktop, which runs this CLI) Glina asks once for a star on its GitHub
+repository. The CLI says it on standard error, so standard output keeps only
+the result; `glina-mcp` adds it as a second text block of that tool result.
+The count and the moments it was shown and dismissed (Unix seconds) live in
+`$XDG_STATE_HOME/glina/star.json` (default `~/.local/state/glina/star.json`),
+replaced whole under `star.json.lock`. `glina star` prints `stage`
+(`counting`, `due`, `shown` or `dismissed`), `prompts`, `threshold`,
+`repository`, `file`, `shownAt` and `dismissedAt`; `dismiss` stops the request
+and `reset` counts again from zero. An unknown action or extra argument exits
+2; a record that is not a star record exits 1 naming the file and
+`glina star reset`; a prompt whose count cannot be kept still prints its result
+and says `glina: this prompt is not counted toward the GitHub star request:
+<cause>`. The real journey is `GLINA_TEST_PROVIDER_URL=… GLINA_TEST_MODEL=…
+GLINA_TEST_MAX_TOKENS=… node --test tests/star/journey.test.mjs` (live Blender MCP).
 
 `setup --check` inspects installed tools, not Blender's live addon. Run `doctor`
 to check the code round trip; an addon installed on disk can still be inactive

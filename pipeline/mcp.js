@@ -13,6 +13,7 @@ import { verifyAsset } from './gate/verify.js';
 import { runDoctor } from './host/doctor.js';
 import { PACKAGE_VERSION, invokedDirectly } from './host/package.js';
 import { sculptWithLlm } from './sculpt/llm_blender.js';
+import { observePrompt, requestText } from './star/star.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const DEFAULT_CONFIG = new URL('../pipeline.config.json', import.meta.url).pathname;
@@ -88,6 +89,20 @@ function textResult(value) {
   return { content: [{ type: 'text', text }] };
 }
 
+// A prompt that succeeded counts toward the GitHub star request; when it makes
+// the request due, the request is a second text block of the same result, so
+// the client shows it once beside the answer. A record that cannot be kept is
+// said on stderr (stdout carries only frames) and the result stands.
+async function counted(result) {
+  try {
+    const request = await observePrompt();
+    if (request) result.content.push({ type: 'text', text: requestText(request) });
+  } catch (error) {
+    console.error(`glina: this prompt is not counted toward the GitHub star request: ${error.message}`);
+  }
+  return result;
+}
+
 function errorResult(message) {
   return { content: [{ type: 'text', text: String(message) }], isError: true };
 }
@@ -109,7 +124,7 @@ async function callTool(name, args = {}) {
         },
         config,
       );
-      return textResult(result);
+      return counted(textResult(result));
     }
     case 'glina_verify_asset': {
       if (typeof args.path !== 'string' || !args.path) {
@@ -136,7 +151,7 @@ async function callTool(name, args = {}) {
         },
         config,
       );
-      return textResult({ ...result, transcript: undefined });
+      return counted(textResult({ ...result, transcript: undefined }));
     }
     case 'glina_check_config': {
       return textResult(await checkPipelineConfig(configPath));

@@ -82,6 +82,7 @@ export const COMMANDS = [
   { name: 'config export', usage: 'config export --out <path> [--config path]', help: 'write a resolved, owner-only config for a remote run' },
   { name: 'doctor', usage: 'doctor [--config path]', help: 'check the config and vault references, the Blender MCP bridge (handshake + code probe) and the declared browser layer (its MCP server and tools); exits 1 when any check fails' },
   { name: 'setup', usage: 'setup [--check] [--dry-run]', help: 'provision Blender, uv and the MCP for Blender addon; --check inspects tools only' },
+  { name: 'star', usage: 'star [status | dismiss | reset]', help: 'the GitHub star request shown once after five successful create or sculpt prompts; dismiss stops it, reset counts again from zero' },
 ];
 
 /**
